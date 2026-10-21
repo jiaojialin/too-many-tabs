@@ -1,0 +1,7 @@
+body { padding: 16px; max-width: 720px; margin: 0 auto; }
+form label { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+form label.block { display: block; }
+form label.block textarea { display: block; width: 100%; margin-top: 4px; font-family: ui-monospace, monospace; }
+input[type="number"] { width: 80px; }
+.actions { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+#status.error { color: var(--danger); }

@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Too Many Tabs",
+  "version": "0.1.0",
+  "description": "Recycles tabs: closes logged-out, duplicate and stale tabs, pauses background audio, and keeps a history of everything it closed.",
+  "minimum_chrome_version": "121",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["tabs", "alarms", "storage", "unlimitedStorage", "scripting"],
+  "optional_host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Too Many Tabs",
+    "default_popup": "popup/popup.html"
+  },
+  "options_page": "options/options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

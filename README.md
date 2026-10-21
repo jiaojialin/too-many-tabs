@@ -2,7 +2,22 @@
 
 A Chrome extension (Manifest V3) that recycles tabs: it automatically closes idle tabs and tabs that are unlikely to be revisited soon, so your tab strip stays manageable and Chrome uses less RAM and CPU.
 
-> Status: spec in progress (Spec Driven Development). This README is the source of truth for behavior.
+> Built with Spec Driven Development: this README is the source of truth for behavior.
+
+## Install (unpacked)
+
+1. Clone this repo.
+2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** and pick the `extension/` folder.
+3. Optional: in the extension's **Settings**, click **Allow pausing media** so background audio is paused instead of muted.
+
+Requires Chrome 121 or later.
+
+## Using it
+
+- **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
+- **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
+- **Settings page**: thresholds (30 min / 24 h by default), logged-out site rules, background-audio options and the keep-playing list.
+- On first install every open tab starts its timers at the install time, so nothing is closed straight away.
 
 ## Definitions
 
@@ -69,7 +84,7 @@ When the user switches to a **different tab in Chrome** while a non-selected tab
 - **Fallback mute**: if the tab is still audible shortly after the pause attempt (Web Audio, custom players, sites that auto-resume, or the script could not be injected), mute the tab with `chrome.tabs.update({ muted: true })`.
 - **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused.
 - **Keep-playing list**: a user-editable list of sites (by host) that are never paused, with a one-click "Let this site keep playing" toggle in the popup.
-- **Permissions**: pausing needs host permission for all sites; it is requested as an **optional** permission when the user enables the feature. Without it, the extension falls back to muting.
+- **Permissions**: pausing needs host permission for all sites; it is an **optional** permission, requested when the user turns the feature on (or clicks **Allow pausing media**) in Settings. The feature is on by default, and without that permission the extension falls back to muting.
 - Incognito tabs are ignored.
 
 Interaction with closing rules: the "audible tabs are never closed" exemption effectively protects tabs on the keep-playing list (they keep playing); tabs paused/muted by this feature are no longer treated as audible (Chrome may still report a muted tab as `audible`, so tabs muted by the extension are explicitly not exempt) and become subject to the closing rules again.
@@ -181,3 +196,28 @@ The duplicate check also runs immediately on navigation and focus events, using 
 ### Testability
 
 All decision logic lives in pure functions with no dependency on Chrome APIs, for example `decide(tabs, state, settings, now) → actions`, `nextDeadline`, `normalizeUrl`, `isLoggedOutTransition` and `pickDuplicateWinner`. They are unit-tested with Vitest. The Chrome-API glue is thin and tested with mocked `chrome.*` APIs.
+
+## Permissions
+
+| Permission | Why |
+|---|---|
+| `tabs` | read tab URLs and titles (duplicates, logged-out detection, history) |
+| `alarms` | deadline-driven and backstop sweeps |
+| `storage`, `unlimitedStorage` | settings, per-tab state and the closed-tab database |
+| `scripting` + optional `<all_urls>` | pause/resume media in background tabs |
+
+## Development
+
+```
+npm install
+npm test          # unit tests (node --test)
+npm run vendor    # re-copy sql.js into extension/vendor after upgrading it
+```
+
+Layout:
+
+- `extension/manifest.json`, `extension/background.js`: MV3 service worker entry point.
+- `extension/lib/`: logic. `rules.js` (closing rules, `nextDeadline`), `logout.js`, `url.js`, `audio.js`, `tabState.js`, `settings.js`, `db.js` (IndexedDB), `export.js`, `timeline.js`, and `controller.js` (wires Chrome events to the rules).
+- `extension/popup/`, `extension/history/`, `extension/options/`, `extension/ui/`: pages.
+- `extension/vendor/`: bundled sql.js (WASM) for SQLite export.
+- `test/`: unit tests; `test/helpers/fakeChrome.js` fakes the `chrome.*` APIs.

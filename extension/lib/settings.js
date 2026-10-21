@@ -1,0 +1,92 @@
+// User settings (stored in chrome.storage.sync under "settings").
+
+export const SETTINGS_KEY = 'settings';
+
+export const DEFAULT_SITE_RULES = [
+  { host: 'chase.com', pattern: 'logon|logoff|logout|signin|timeout' },
+  { host: 'fidelity.com', pattern: 'login|logout|logoff|timeout' },
+];
+
+export const DEFAULT_SETTINGS = Object.freeze({
+  loggedOutMinutes: 30,
+  staleHours: 24,
+  audioPauseEnabled: true,
+  audioPauseDelaySeconds: 2,
+  keepPlayingHosts: [],
+  siteRules: DEFAULT_SITE_RULES,
+});
+
+function positiveNumber(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+// Fills in defaults and drops invalid values from whatever was stored.
+export function mergeSettings(stored = {}) {
+  const s = stored ?? {};
+  return {
+    loggedOutMinutes: positiveNumber(s.loggedOutMinutes, DEFAULT_SETTINGS.loggedOutMinutes),
+    staleHours: positiveNumber(s.staleHours, DEFAULT_SETTINGS.staleHours),
+    audioPauseEnabled:
+      typeof s.audioPauseEnabled === 'boolean' ? s.audioPauseEnabled : DEFAULT_SETTINGS.audioPauseEnabled,
+    audioPauseDelaySeconds: positiveNumber(s.audioPauseDelaySeconds, DEFAULT_SETTINGS.audioPauseDelaySeconds),
+    keepPlayingHosts: Array.isArray(s.keepPlayingHosts)
+      ? s.keepPlayingHosts.filter((h) => typeof h === 'string' && h)
+      : [],
+    siteRules: Array.isArray(s.siteRules)
+      ? s.siteRules.filter((r) => r && typeof r.host === 'string' && isValidPattern(r.pattern))
+      : DEFAULT_SITE_RULES,
+  };
+}
+
+export function isValidPattern(pattern) {
+  if (typeof pattern !== 'string' || pattern === '') return false;
+  try {
+    new RegExp(pattern, 'i');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// "https://Music.YouTube.com/watch" -> "music.youtube.com". Returns '' if empty.
+export function cleanHost(input) {
+  let value = input.trim().toLowerCase();
+  if (!value) return '';
+  value = value.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');
+  value = value.split(/[/?#]/)[0];
+  return value.replace(/:\d+$/, '');
+}
+
+// One host per line; blank lines ignored; duplicates removed.
+export function parseHostList(text) {
+  const hosts = text.split(/\r?\n/).map(cleanHost).filter(Boolean);
+  return [...new Set(hosts)];
+}
+
+// One rule per line: "<host> <regex>". Returns parsed rules and line errors.
+export function parseSiteRules(text) {
+  const rules = [];
+  const errors = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const [rawHost, ...rest] = trimmed.split(/\s+/);
+    const host = cleanHost(rawHost);
+    const pattern = rest.join(' ');
+    if (!host || !isValidPattern(pattern)) {
+      errors.push(`Line ${i + 1}: expected "<host> <regex>"`);
+      return;
+    }
+    rules.push({ host, pattern });
+  });
+  return { rules, errors };
+}
+
+export function formatSiteRules(rules) {
+  return rules.map((r) => `${r.host} ${r.pattern}`).join('\n');
+}
+
+export function toggleHost(hosts, host, enabled) {
+  const without = hosts.filter((h) => h !== host);
+  return enabled ? [...without, host] : without;
+}
