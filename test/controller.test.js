@@ -228,14 +228,55 @@ test('redirects while loading are not logout transitions, and loading tabs are n
   assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[2].loggedOutSince, null);
 });
 
-test('a real logout after the page finished loading is flagged', async () => {
+test('a real logout to a sign-out page closes the tab once it has loaded', async () => {
   const env = setup(baseTabs());
   await env.controller.request();
   Object.assign(env.tab(2), { url: 'https://other.test/session-expired', status: 'loading' });
   await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [], 'still loading');
   Object.assign(env.tab(2), { status: 'complete', title: 'Session expired' });
   await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [2]);
+  assert.equal(env.history.records[0].reason, 'logged-out');
+});
+
+test('a new tab opened straight onto a sign-out page is not treated as logged out', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: false, url: 'https://help.test/how-to-log-out', title: '', status: 'loading', pinned: false, audible: false, incognito: false });
+  await env.controller.request();
+  Object.assign(env.tab(3), { status: 'complete', title: 'How to log out' });
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, []);
+});
+
+test('a logout from a sign-in page waits 30 minutes after the last visit', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  Object.assign(env.tab(2), { url: 'https://other.test/login', title: 'Sign in' });
+  await env.controller.request();
   assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[2].loggedOutSince, env.now);
+  env.advance(29 * MINUTE);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, []);
+  env.advance(MINUTE);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [2]);
+});
+
+test('a tab already on a sign-out page when first seen is closed, but not while being visited', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://www.fidelity.com/customer-service/customer-logout', title: 'Fidelity' },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'https://www.fidelity.com/customer-service/customer-logout', title: 'Fidelity' },
+    { id: 3, windowId: 1, index: 2, active: false, url: 'https://news.test/', title: 'News' },
+  ];
+  const env = setup(tabs);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [2]);
+  env.tab(1).active = false;
+  env.tab(3).active = true;
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [2, 1]);
 });
 
 test('duplicates wait until the new copy has finished loading', async () => {

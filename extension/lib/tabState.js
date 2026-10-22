@@ -1,6 +1,6 @@
 // Per-tab tracked state, persisted in chrome.storage.local.
 
-import { nextLogoutState } from './logout.js';
+import { isSignedOutPage, nextLogoutState } from './logout.js';
 import { normalizeUrl } from './url.js';
 
 export const STATE_KEY = 'tabState';
@@ -18,7 +18,9 @@ export function newEntry(tab, now, siteRules = []) {
     index: tab.index,
     lastVisitedAt: now,
     loginLike: nextLogoutState(undefined, tab, now, siteRules).loginLike,
-    loggedOutSince: null,
+    // A tab already sitting on a sign-out page when first seen (e.g. open
+    // before the extension was installed) has no transition to detect.
+    loggedOutSince: tab.status !== 'loading' && isSignedOutPage(tab) ? now : null,
     // A tab first seen mid-load has no reliable baseline yet (its title may
     // not have arrived), so the first completed page can't count as a logout.
     settled: tab.status !== 'loading',

@@ -17,7 +17,7 @@ Requires Chrome 121 or later.
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
 - **Settings page**: the tab limit (12 by default), thresholds (30 min / 24 h / 10 min by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
-- On first install every open tab starts its timers at the install time, so nothing is closed straight away.
+- On first install every open tab starts its timers at the install time, so nothing is closed for being idle straight away. Duplicates and tabs already on a sign-out page (Rule 1) are closed right away.
 
 ## Definitions
 
@@ -65,7 +65,12 @@ Auto-closing only takes effect while **more than 12 tabs** (configurable) are op
 
 ### Rule 1: Logged-out tabs
 
-Detect tabs whose site has signed the user out due to inactivity (common on banking/finance sites such as Chase and Fidelity), and close them **30 minutes after they were last visited** (configurable).
+Detect tabs whose site has signed the user out (after inactivity, common on banking/finance sites such as Chase and Fidelity, or because the user logged out) and close them:
+
+- **On a sign-out page**: close **immediately**, regardless of when the tab was last visited. Once you're logged out, the tab has no further use. A sign-out page has `logout`, `logoff`, `signout`, `timeout` or `session-expired` in its address (host, path or `#` route; not the query string, so a search for "session timeout" doesn't count), e.g. `https://www.fidelity.com/customer-service/customer-logout`, or a title saying it already happened ("Signed out", "Logged off", "Session expired"). A page that also offers to sign in again (`login`/`signin` in the URL, "Sign in"/"Log on" in the title) is treated as a sign-in page.
+- **On a sign-in page** (login, logon, sign in): close **30 minutes after the tab was last visited** (configurable). The delay protects a sign-in you are in the middle of, e.g. while fetching a 2FA code from another tab.
+- The global exemptions still apply: the tab you are looking at is never closed, so a sign-out page closes as soon as you switch away from it. Rule 0 (tab limit) applies.
+- A tab counts as logged out after a same-site transition (below), including from a sign-in page to a sign-out page. A tab that is already on a sign-out page when the extension first sees it (e.g. open before the extension was installed) also counts. A sign-out page opened from another site (e.g. an article about logging out, or a cross-domain SSO logout) does not.
 
 Detection signals (no extra host permissions required):
 
@@ -75,7 +80,7 @@ Detection signals (no extra host permissions required):
 
 Behavior:
 
-- Checks run every minute (`chrome.alarms`), so a tab closes within ~1 minute after the threshold.
+- Sign-out pages are closed as soon as the page finishes loading (or as soon as you leave the tab). Sign-in pages are closed by the deadline-driven sweep, within ~30 seconds after the threshold.
 - If logout is detected after the threshold has already passed, the tab closes at the next check.
 - Visiting the tab again resets the timer; navigating away from the login/timeout page clears the logged-out flag.
 - Transitions are evaluated only once a page has finished loading, so redirects during a load (e.g. an SSO token refresh that briefly visits a login URL) and titles that arrive late on a freshly opened login page are not mistaken for a logout. A tab that is still loading is never closed as logged-out.
@@ -190,7 +195,7 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 Instead of polling on a fixed interval, the extension schedules the next sweep for the moment something actually becomes due.
 
 - After every sweep, and after any event that changes state (a visit, a logout detected or cleared, a tab created or removed, a settings change), compute `nextDeadline(tabs, state, settings, now)`. This is the earliest time any non-exempt tab reaches a closing threshold:
-  - logged-out tab: `lastVisitedAt + 30 min`,
+  - logged-out tab on a sign-in page: `lastVisitedAt + 30 min` (a logged-out tab on a sign-out page is closed in the same pass that detects it),
   - landing-page tab: `lastVisitedAt + 10 min`,
   - any tab: `lastVisitedAt + 24 h`.
 - Set a single `chrome.alarms` alarm (`sweep`) for that time, replacing the previous one. Chrome enforces a 30-second minimum delay, so deadlines in the past or less than 30 seconds away are swept immediately instead.
@@ -224,7 +229,8 @@ for each tab:
   idle = now - lastVisitedAt(tab)
   if exempt(tab): continue
   if isLandingPage(tab) and idle >= 10 min    -> close(tab, "empty")
-  else if loggedOutSince(tab) and idle >= 30 min -> close(tab, "logged-out")
+  else if loggedOutSince(tab) and (isSignedOutPage(tab) or idle >= 30 min)
+                                              -> close(tab, "logged-out")
   else if idle >= 24 h                        -> close(tab, "stale")
 
 for each group of tabs sharing a normalizedUrl (size > 1):

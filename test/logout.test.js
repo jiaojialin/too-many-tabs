@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isLoginLike, isLoginLikeTitle, isLoginLikeUrl, nextLogoutState } from '../extension/lib/logout.js';
+import { isLoginLike, isLoginLikeTitle, isLoginLikeUrl, isSignedOutPage, nextLogoutState } from '../extension/lib/logout.js';
 import { DEFAULT_SITE_RULES } from '../extension/lib/settings.js';
 
 test('isLoginLikeUrl recognizes login, logout and timeout URLs', () => {
@@ -77,4 +77,38 @@ test('nextLogoutState clears the flag after leaving the login page', () => {
     loginLike: false,
     loggedOutSince: null,
   });
+});
+
+test('isSignedOutPage: sign-out and timeout pages, not sign-in pages', () => {
+  for (const page of [
+    { url: 'https://www.fidelity.com/customer-service/customer-logout', title: 'Fidelity' },
+    { url: 'https://bank.test/logoff.do', title: '' },
+    { url: 'https://bank.test/session-expired', title: 'Session expired' },
+    { url: 'https://app.test/#/logoff', title: '' },
+    { url: 'https://bank.test/home', title: 'You have been signed out' },
+    { url: 'https://bank.test/home', title: 'Session expired' },
+  ]) {
+    assert.ok(isSignedOutPage(page), page.url + ' ' + page.title);
+  }
+  for (const page of [
+    { url: 'https://secure.chase.com/web/auth/#/logon/logon', title: 'Sign in' },
+    { url: 'https://bank.test/login', title: 'Log On' },
+    { url: 'https://example.com/catalog-index', title: 'Catalog' },
+    { url: 'chrome://settings', title: 'Signed out' },
+    { url: 'https://bank.test/account?reason=sessionTimeout', title: '' },
+    { url: 'https://bank.test/login?reason=sessionTimeout', title: '' },
+    { url: 'https://bank.test/signin?from=logout', title: '' },
+    { url: 'https://bank.test/session-expired', title: 'Session Expired - Sign In' },
+    { url: 'https://www.google.com/search?q=session+timeout', title: 'session timeout - Google Search' },
+    { url: 'https://github.com/o/r/pull/6', title: 'Close tabs on a sign-out page immediately' },
+    { url: 'https://ci.test/build/1', title: 'Connection timed out' },
+  ]) {
+    assert.ok(!isSignedOutPage(page), page.url + ' ' + page.title);
+  }
+});
+
+test('nextLogoutState flags a same-site move from a sign-in page to a sign-out page', () => {
+  const prev = { url: 'https://bank.test/login', loginLike: true, loggedOutSince: null };
+  assert.equal(nextLogoutState(prev, { url: 'https://bank.test/session-expired', title: '' }, 7).loggedOutSince, 7);
+  assert.equal(nextLogoutState(prev, { url: 'https://other.test/logout', title: '' }, 7).loggedOutSince, null, 'another site');
 });
