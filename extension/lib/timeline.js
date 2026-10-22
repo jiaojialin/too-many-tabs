@@ -6,6 +6,7 @@ export const REASON_LABELS = {
   'logged-out': 'Logged out',
   duplicate: 'Duplicate',
   stale: 'Stale',
+  empty: 'Empty',
 };
 
 export function startOfDay(ts) {

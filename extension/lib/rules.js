@@ -4,6 +4,7 @@
 // mutedByUs, normalizedUrl, ... }). `ctx` is { now, activeWindowId,
 // visitedTabId, settings }.
 
+import { isLandingPage } from './landing.js';
 import { isWebUrl, normalizeUrl } from './url.js';
 
 export const MINUTE = 60 * 1000;
@@ -23,10 +24,24 @@ export function isExempt(tab, entry, ctx) {
   );
 }
 
+// Rule 4: a landing-page tab may be closed in the active window too, but
+// never while it is the tab being visited.
+export function isLandingCandidate(tab, entry, ctx) {
+  return (
+    tab.status !== 'loading' &&
+    isLandingPage(tab.url ?? '', ctx.settings.landingPages) &&
+    !tab.incognito &&
+    !tab.pinned &&
+    !(tab.audible && !entry?.mutedByUs) &&
+    tab.id !== ctx.visitedTabId
+  );
+}
+
 function thresholds(settings) {
   return {
     loggedOut: settings.loggedOutMinutes * MINUTE,
     stale: settings.staleHours * HOUR,
+    landing: settings.landingIdleMinutes * MINUTE,
   };
 }
 
@@ -85,8 +100,16 @@ export function decide(tabs, entries, ctx) {
   if (!overTabLimit(tabs, ctx.settings)) return [];
   const closures = [];
   const closing = new Set();
+  const landingLimit = thresholds(ctx.settings).landing;
   for (const tab of tabs) {
     const entry = entries[tab.id];
+    if (isLandingCandidate(tab, entry, ctx)) {
+      if (ctx.now - lastVisitedAt(tab, entry, ctx) >= landingLimit) {
+        closures.push({ tab, reason: 'empty' });
+        closing.add(tab.id);
+        continue;
+      }
+    }
     if (isExempt(tab, entry, ctx)) continue;
     const reason = dueReason(tab, entry, ctx);
     if (reason) {
@@ -112,13 +135,17 @@ export function nextDeadline(tabs, entries, ctx) {
   if (!overTabLimit(tabs, ctx.settings)) return null;
   const limit = thresholds(ctx.settings);
   let next = null;
+  const consider = (due) => {
+    if (next === null || due < next) next = due;
+  };
   for (const tab of tabs) {
     const entry = entries[tab.id];
+    if (isLandingCandidate(tab, entry, ctx)) consider(lastVisitedAt(tab, entry, ctx) + limit.landing);
     if (isExempt(tab, entry, ctx)) continue;
     const visited = lastVisitedAt(tab, entry, ctx);
     let due = visited + limit.stale;
     if (entry?.loggedOutSince) due = Math.min(due, visited + limit.loggedOut);
-    if (next === null || due < next) next = due;
+    consider(due);
   }
   return next;
 }

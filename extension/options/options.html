@@ -21,6 +21,12 @@
     <label>Close any tab not visited for
       <input type="number" id="staleHours" min="1" step="1" required> hours
     </label>
+    <label>Close unused new-tab and landing pages
+      <input type="number" id="landingIdleMinutes" min="1" step="1" required> minutes after last visit
+    </label>
+    <label class="block">Landing pages <span class="muted">(one per line: <code>host</code>, <code>host/path</code>, <code>*.host</code>, <code>google.*</code>, or a full URL like <code>chrome://newtab</code>)</span>
+      <textarea id="landingPages" rows="5" spellcheck="false"></textarea>
+    </label>
     <label class="block">Logged-out site rules <span class="muted">(one per line: <code>host regex</code>, matched against the full URL)</span>
       <textarea id="siteRules" rows="4" spellcheck="false"></textarea>
     </label>

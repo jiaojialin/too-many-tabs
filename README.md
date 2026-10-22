@@ -16,7 +16,7 @@ Requires Chrome 121 or later.
 
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
-- **Settings page**: the tab limit (12 by default), thresholds (30 min / 24 h by default), logged-out site rules, background-audio options and the keep-playing list.
+- **Settings page**: the tab limit (12 by default), thresholds (30 min / 24 h / 10 min by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
 - On first install every open tab starts its timers at the install time, so nothing is closed straight away.
 
 ## Definitions
@@ -48,7 +48,7 @@ The extension never auto-closes:
 
 - pinned tabs,
 - audible tabs (playing sound),
-- any tab in the active window,
+- any tab in the active window (one exception: Rule 4 may close unused landing-page tabs there, but never the tab you are looking at),
 - any incognito tab (incognito is ignored entirely).
 
 ## Rules
@@ -95,6 +95,20 @@ Close any tab that has not been visited for **24 hours** (configurable).
 - Tabs already discarded (unloaded) by Chrome are included.
 - After a browser restart, restored tabs keep their stored last-visited time when it can be matched (by URL and position); otherwise the restore time is used, so tabs are never closed on startup just because their history was lost.
 
+### Rule 4: Empty and landing-page tabs
+
+Close tabs that are still on an empty or landing page **10 minutes after they were last visited** (configurable). The user opened them but did nothing with them.
+
+- **Landing pages** come from a built-in, user-editable list (Settings, one pattern per line):
+  - `chrome://newtab`, `chrome://new-tab-page`, `about:blank`
+  - search engine home pages: `google.*` (any Google country domain, e.g. google.com, google.co.uk), `google.*/webhp`, `bing.com`, `duckduckgo.com`, `search.yahoo.com`, `baidu.com`
+- Pattern format: `host` or `host/path` (a leading `www.` is ignored, `*.` matches subdomains, `google.*` matches any Google country domain); full URLs such as `chrome://newtab` or `about:blank` match exactly.
+- A site's general home page (e.g. `nytimes.com/`) is **not** a landing page by default; add it to the list if wanted.
+- **"Did nothing"** means the tab is still on the landing page: it matches only the page itself, not search results (any `q`, `p`, `wd`, `query` or `text` parameter, or a `#q=` fragment, means a search was made). The extension can't see text typed into a search box but not submitted.
+- **Active window**: unlike the other rules, a landing-page tab in the active window can be closed, except the tab currently being visited. Pinned, audible and incognito tabs are still exempt, and Rule 0 (tab limit) applies.
+- Tabs still loading are never closed by this rule.
+- History reason: `empty`.
+
 ## Background audio pausing
 
 When the user switches to a **different tab in Chrome** while a non-selected tab is playing sound, the extension pauses that tab's playback.
@@ -125,7 +139,7 @@ Each record stores:
 | `title` | tab title |
 | `domain` | host name |
 | `favIconUrl` | favicon URL, if any |
-| `reason` | `logged-out` \| `duplicate` \| `stale` |
+| `reason` | `logged-out` \| `duplicate` \| `stale` \| `empty` |
 | `closedAt` | timestamp when closed |
 | `lastVisitedAt` | timestamp the tab was last visited |
 | `windowId`, `groupId`, `index` | where the tab was |
@@ -176,6 +190,7 @@ Instead of polling on a fixed interval, the extension schedules the next sweep f
 
 - After every sweep, and after any event that changes state (a visit, a logout detected or cleared, a tab created or removed, a settings change), compute `nextDeadline(tabs, state, settings, now)`. This is the earliest time any non-exempt tab reaches a closing threshold:
   - logged-out tab: `lastVisitedAt + 30 min`,
+  - landing-page tab: `lastVisitedAt + 10 min`,
   - any tab: `lastVisitedAt + 24 h`.
 - Set a single `chrome.alarms` alarm (`sweep`) for that time, replacing the previous one. Chrome enforces a 30-second minimum delay, so deadlines in the past or less than 30 seconds away are swept immediately instead.
 - When there is no deadline (nothing can become closable), no `sweep` alarm is set.
@@ -202,8 +217,12 @@ exempt(tab) = tab.pinned
 
 if number of tabs <= tabLimit: close nothing, clear the sweep alarm, stop
 
-for each tab not exempt:
+for each tab:
   idle = now - lastVisitedAt(tab)
+  if isLandingPage(tab) and not landingExempt(tab):   # pinned/audible/incognito/visited
+    if idle >= 10 min                         -> close(tab, "empty")
+    continue
+  if exempt(tab): continue
   if loggedOutSince(tab) and idle >= 30 min  -> close(tab, "logged-out")
   else if idle >= 24 h                        -> close(tab, "stale")
 
@@ -219,7 +238,7 @@ The duplicate check also runs immediately on navigation and focus events, using 
 
 ### Testability
 
-All decision logic lives in pure functions with no dependency on Chrome APIs, for example `decide(tabs, state, settings, now) → actions`, `nextDeadline`, `normalizeUrl`, `isLoggedOutTransition` and `pickDuplicateWinner`. They are unit-tested with Vitest. The Chrome-API glue is thin and tested with mocked `chrome.*` APIs.
+All decision logic lives in pure functions with no dependency on Chrome APIs, for example `decide(tabs, state, settings, now) → actions`, `nextDeadline`, `isLandingPage`, `normalizeUrl`, `isLoggedOutTransition` and `pickDuplicateWinner`. They are unit-tested with Vitest. The Chrome-API glue is thin and tested with mocked `chrome.*` APIs.
 
 ## Permissions
 
