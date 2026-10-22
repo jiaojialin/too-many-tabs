@@ -566,6 +566,13 @@ test('the mute fallback is skipped if the tab became the only one playing', asyn
   env.tab(1).audible = false; // the other sound stops, tab 2 auto-resumed
   await env.timers.runAll();
   assert.deepEqual(env.chrome._state.updates, []);
+  // The other sound starts again: tab 2 goes through pause/mute again.
+  env.tab(1).audible = true;
+  await env.controller.request();
+  await env.timers.runAll(); // pause
+  await env.timers.runAll(); // mute check
+  assert.deepEqual(env.chrome._state.scripts, [[2, 'pauseMediaInPage'], [2, 'pauseMediaInPage']]);
+  assert.deepEqual(env.chrome._state.updates, [[2, { muted: true }]]);
 });
 
 test('a tab we muted is unmuted when the competing sound stops', async () => {

@@ -247,11 +247,12 @@ export function createController({ chrome, history, now = () => Date.now(), time
     }
   }
 
+  // Runs after a pause attempt. If the tab is still audible the pause didn't
+  // silence it: mute it, or, if it may play now, drop the pause flag so it
+  // goes through the pause/mute flow again when competing sound returns.
   async function muteIfStillAudible(tab, entry, ctx) {
+    if (!entry?.pausedByUs || entry.mutedByUs || !tab.audible) return;
     if (
-      entry?.pausedByUs &&
-      !entry.mutedByUs &&
-      tab.audible &&
       !tab.mutedInfo?.muted &&
       tab.id !== ctx.visitedTabId &&
       tab.id !== ctx.audioKeeperId &&
@@ -259,6 +260,8 @@ export function createController({ chrome, history, now = () => Date.now(), time
       !isKeepPlaying(tab.url, ctx.settings.keepPlayingHosts)
     ) {
       await mute(tab, entry);
+    } else {
+      entry.pausedByUs = false;
     }
   }
 
