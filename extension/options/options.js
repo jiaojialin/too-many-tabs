@@ -4,18 +4,20 @@ import {
   formatSiteRules,
   mergeSettings,
   parseHostList,
+  parsePatternList,
   parseSiteRules,
 } from '../lib/settings.js';
 
 const ALL_URLS = { origins: ['<all_urls>'] };
 const $ = (id) => document.getElementById(id);
-const NUMBER_FIELDS = ['tabLimit', 'loggedOutMinutes', 'staleHours', 'audioPauseDelaySeconds'];
+const NUMBER_FIELDS = ['tabLimit', 'loggedOutMinutes', 'landingIdleMinutes', 'staleHours', 'audioPauseDelaySeconds'];
 
 function fill(settings) {
   for (const id of NUMBER_FIELDS) $(id).value = settings[id];
   $('audioPauseEnabled').checked = settings.audioPauseEnabled;
   $('keepPlayingHosts').value = settings.keepPlayingHosts.join('\n');
   $('siteRules').value = formatSiteRules(settings.siteRules);
+  $('landingPages').value = settings.landingPages.join('\n');
 }
 
 function showStatus(message, isError = false) {
@@ -40,6 +42,7 @@ $('form').addEventListener('submit', async (event) => {
     audioPauseEnabled: $('audioPauseEnabled').checked,
     keepPlayingHosts: parseHostList($('keepPlayingHosts').value),
     siteRules: rules,
+    landingPages: parsePatternList($('landingPages').value),
   });
   await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
   fill(settings);

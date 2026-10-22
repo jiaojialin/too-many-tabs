@@ -10,6 +10,7 @@
   --badge-logged-out: #8e44ad;
   --badge-duplicate: #d35400;
   --badge-stale: #607d8b;
+  --badge-empty: #00897b;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -58,6 +59,7 @@ button:disabled { opacity: .5; cursor: default; }
 .badge.logged-out { background: var(--badge-logged-out); }
 .badge.duplicate { background: var(--badge-duplicate); }
 .badge.stale { background: var(--badge-stale); }
+.badge.empty { background: var(--badge-empty); }
 .favicon { width: 16px; height: 16px; flex: none; }
 .row {
   display: flex;

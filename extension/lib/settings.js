@@ -1,5 +1,6 @@
 // User settings (stored in chrome.storage.sync under "settings").
 
+import { DEFAULT_LANDING_PAGES } from './landing.js';
 import { hostMatches } from './url.js';
 
 export const SETTINGS_KEY = 'settings';
@@ -18,6 +19,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   tabLimit: 12,
   loggedOutMinutes: 30,
   staleHours: 24,
+  landingIdleMinutes: 10,
+  landingPages: DEFAULT_LANDING_PAGES,
   audioPauseEnabled: true,
   audioPauseDelaySeconds: 2,
   keepPlayingHosts: [],
@@ -39,6 +42,10 @@ export function mergeSettings(stored = {}) {
     tabLimit: wholeNumber(s.tabLimit, DEFAULT_SETTINGS.tabLimit),
     loggedOutMinutes: positiveNumber(s.loggedOutMinutes, DEFAULT_SETTINGS.loggedOutMinutes),
     staleHours: positiveNumber(s.staleHours, DEFAULT_SETTINGS.staleHours),
+    landingIdleMinutes: positiveNumber(s.landingIdleMinutes, DEFAULT_SETTINGS.landingIdleMinutes),
+    landingPages: Array.isArray(s.landingPages)
+      ? s.landingPages.filter((p) => typeof p === 'string' && p.trim())
+      : DEFAULT_LANDING_PAGES,
     audioPauseEnabled:
       typeof s.audioPauseEnabled === 'boolean' ? s.audioPauseEnabled : DEFAULT_SETTINGS.audioPauseEnabled,
     audioPauseDelaySeconds: Math.min(
@@ -96,6 +103,15 @@ export function parseSiteRules(text) {
     rules.push({ host, pattern });
   });
   return { rules, errors };
+}
+
+// One landing-page pattern per line; blank lines and "#" comments ignored.
+export function parsePatternList(text) {
+  const patterns = text
+    .split(/\r?\n/)
+    .map((line) => line.trim().toLowerCase())
+    .filter((line) => line && !line.startsWith('#'));
+  return [...new Set(patterns)];
 }
 
 export function formatSiteRules(rules) {

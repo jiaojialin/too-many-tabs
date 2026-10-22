@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HOUR, MINUTE, decide, isExempt, lastVisitedAt, nextDeadline, overTabLimit, pickDuplicateWinner } from '../extension/lib/rules.js';
+import { HOUR, MINUTE, decide, isLandingCandidate, isExempt, lastVisitedAt, nextDeadline, overTabLimit, pickDuplicateWinner } from '../extension/lib/rules.js';
 import { DEFAULT_SETTINGS } from '../extension/lib/settings.js';
 
 const NOW = 1_000_000_000_000;
@@ -96,7 +96,7 @@ test('duplicates: different query parameters are different pages', () => {
 });
 
 test('duplicates: non-web pages are ignored', () => {
-  const tabs = [tab(1, { url: 'chrome://newtab/' }), tab(2, { url: 'chrome://newtab/' })];
+  const tabs = [tab(1, { url: 'chrome://settings/' }), tab(2, { url: 'chrome://settings/' })];
   assert.deepEqual(decide(tabs, { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE) }, ctx()), []);
 });
 
@@ -161,4 +161,37 @@ test('tab limit counts pinned and active-window tabs, and applies to duplicates'
   const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE) };
   assert.deepEqual(decide(tabs, entries, ctx({ settings: DEFAULT_SETTINGS })).map((c) => c.tab.id), [1]);
   assert.deepEqual(decide(tabs.slice(1), entries, ctx({ settings: DEFAULT_SETTINGS })), [], '12 tabs: no duplicate closing');
+});
+
+test('Rule 4: unused landing tabs close 10 minutes after the last visit', () => {
+  const tabs = [tab(1, { url: 'chrome://newtab/' }), tab(2, { url: 'https://www.google.com/' }), tab(3, { url: 'about:blank' })];
+  const entries = { 1: visitedAgo(10 * MINUTE), 2: visitedAgo(11 * MINUTE), 3: visitedAgo(9 * MINUTE) };
+  assert.deepEqual(decide(tabs, entries, ctx()).map((c) => [c.tab.id, c.reason]), [[1, 'empty'], [2, 'empty']]);
+  assert.equal(nextDeadline([tabs[2]], entries, ctx()), NOW + MINUTE, 'tab 3 is due in a minute');
+});
+
+test('Rule 4: landing tabs in the active window close, but never the visited tab', () => {
+  const tabs = [tab(1, { url: 'chrome://newtab/', windowId: ACTIVE_WINDOW }), tab(2, { url: 'chrome://newtab/', windowId: ACTIVE_WINDOW })];
+  const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(HOUR) };
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 2 })).map((c) => c.tab.id), [1]);
+});
+
+test('Rule 4: pinned, audible, incognito and loading landing tabs are kept', () => {
+  const url = 'chrome://newtab/';
+  const tabs = [tab(1, { url, pinned: true }), tab(2, { url, audible: true }), tab(3, { url, incognito: true }), tab(4, { url, status: 'loading' })];
+  const old = visitedAgo(HOUR);
+  assert.deepEqual(decide(tabs, { 1: old, 2: old, 3: old, 4: old }, ctx()), []);
+  assert.ok(!isLandingCandidate(tab(5, { url: 'https://www.google.com/search?q=x' }), old, ctx()), 'a search was made');
+});
+
+test('Rule 4: the tab limit still applies', () => {
+  const tabs = [tab(1, { url: 'chrome://newtab/' })];
+  assert.deepEqual(decide(tabs, { 1: visitedAgo(HOUR) }, ctx({ settings: DEFAULT_SETTINGS })), []);
+});
+
+test('Rule 4: honours a custom landing list and idle time', () => {
+  const settings = { ...SETTINGS, landingPages: ['nytimes.com'], landingIdleMinutes: 1 };
+  const tabs = [tab(1, { url: 'https://www.nytimes.com/' }), tab(2, { url: 'chrome://newtab/' })];
+  const entries = { 1: visitedAgo(MINUTE), 2: visitedAgo(MINUTE) };
+  assert.deepEqual(decide(tabs, entries, ctx({ settings })).map((c) => c.tab.id), [1]);
 });

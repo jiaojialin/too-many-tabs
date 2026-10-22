@@ -494,3 +494,17 @@ test('tab limit does not count incognito tabs and does not affect audio pausing'
   await env.timers.runAll();
   assert.deepEqual(env.chrome._state.updates, [[2, { muted: true }]], 'audio is still paused/muted');
 });
+
+test('Rule 4: an unused new tab left behind in the active window is closed after 10 minutes', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: false, url: 'chrome://newtab/', title: 'New Tab' },
+    { id: 2, windowId: 1, index: 1, active: true, url: 'https://work.test/' },
+  ];
+  const env = setup(tabs);
+  await env.controller.request();
+  assert.equal(env.chrome._state.alarms.get(SWEEP_ALARM).when, env.now + 10 * MINUTE);
+  env.advance(10 * MINUTE);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [1]);
+  assert.equal(env.history.records[0].reason, 'empty');
+});
