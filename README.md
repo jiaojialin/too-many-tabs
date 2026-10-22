@@ -152,12 +152,14 @@ Indexes: `closedAt`, `domain`, `reason`, `url`.
 
 A full extension page (opened from the popup's "History" button) for reviewing and browsing everything the extension closed, organized by when it was closed:
 
-- **Timeline view**: closed tabs sorted by close time (newest first, toggle to oldest first), grouped under date headers ("Today", "Yesterday", then e.g. "Mon, Oct 19, 2026"). Each row shows favicon, title, domain, reason badge, and the exact local close time (e.g. `14:32`); hovering shows the full date/time and last-visited time.
+- **One day per page**: the page shows a single day ("Today", "Yesterday", then e.g. "Mon, Oct 19, 2026"), starting with the most recent day that has closed tabs. **‹ Newer** / **Older ›** buttons step to the next day that has matching records, skipping empty days (hover shows which day).
+- **Day count**: under the day's heading, a line with how many tabs were closed that day: "12 tabs closed so far today" for today (it updates when you come back to the page), "8 tabs closed yesterday" or "34 tabs closed on Mon, Oct 19, 2026" for past days. With a search, domain or reason filter it counts the matching tabs ("3 matching tabs closed so far today").
+- **Rows**: the day's closed tabs sorted by close time (newest first, toggle to oldest first). Each row shows favicon, title, domain, reason badge, and the exact local close time (e.g. `14:32`); hovering shows the full date/time and last-visited time.
 - **Date/time filter**: quick ranges (last hour, today, last 7 days, last 30 days, all) plus a custom from/to date-time picker.
-- **Other filters**: free-text search (title/URL), domain, and reason; filters combine with the date range.
-- **Paging**: loads incrementally (infinite scroll), backed by the `closedAt` index, so large histories stay fast.
+- **Other filters**: free-text search (title/URL), domain, and reason; filters combine with the date range. Changing a filter jumps to the most recent day with matching records.
+- **Paging**: by day, backed by the `closedAt` index (each day and each "next day with records" lookup is a range query), so large histories stay fast. Exports still cover every matching record, not just the day shown.
 - One click reopens a tab (and the popup shows the most recent closures with a quick "reopen").
-- Records can be deleted individually or cleared all at once.
+- Records can be deleted individually or cleared all at once. Deleting the last record of a day moves to the next older (or newer) day.
 
 ### Export
 

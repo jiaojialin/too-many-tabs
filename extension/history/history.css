@@ -3,13 +3,14 @@ header { position: sticky; top: 0; background: var(--bg); padding-bottom: 8px; z
 #filters, .actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
 #filters label { display: flex; gap: 6px; align-items: center; }
 #custom-range:not([hidden]) { display: contents; }
-.day h2 { position: sticky; top: 104px; background: var(--bg); padding: 4px 0; }
+#day-nav:not([hidden]) { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.day-heading { text-align: center; }
+.day-heading h2 { margin: 0; font-size: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
+.day-heading p { margin: 2px 0 0; }
 .row .title a { color: var(--text); text-decoration: none; }
 .row .title a:hover { text-decoration: underline; }
 .row .domain { color: var(--muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#sentinel { height: 1px; }
 @media (max-width: 640px) {
   body { padding: 12px 16px; }
   .row .domain { display: none; }
-  .day h2 { position: static; }
 }

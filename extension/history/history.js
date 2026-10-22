@@ -1,19 +1,17 @@
 import { createHistoryDb } from '../lib/db.js';
 import { exportFilename, toCsv, toJson, toSqlite } from '../lib/export.js';
-import { dayLabel, formatClock, formatFull, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
+import { dayCountText, dayLabel, endOfDay, formatClock, formatFull, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
 import { el, favicon, isLinkable, reasonBadge, reopen } from '../ui/render.js';
 
-const PAGE_SIZE = 100;
 const history = createHistoryDb();
 const $ = (id) => document.getElementById(id);
 
+// The page shows one day at a time (README "History page").
 let order = 'desc';
-let cursor = null;
-let exhausted = false;
-let loading = false;
 let generation = 0;
-let lastDay = null;
-let currentList = null;
+let currentDay = null;
+let olderDay = null;
+let newerDay = null;
 
 function filters() {
   const preset = $('preset').value;
@@ -72,68 +70,70 @@ function row(record) {
   return node;
 }
 
-// Drops a deleted row, its day section if that is now empty, and refreshes
-// the empty-state message and domain filter.
+// After a delete, refresh the day (its count, or another day if it is now empty).
 function removeRow(node) {
-  const section = node.closest('.day');
   node.remove();
-  if (section && !section.querySelector('.row')) {
-    if (section.lastElementChild === currentList) {
-      lastDay = null;
-      currentList = null;
-    }
-    section.remove();
-  }
-  $('empty').hidden = $('timeline').childElementCount > 0 || !exhausted;
   renderDomains();
-  if (!exhausted && isSentinelVisible()) loadMore();
+  show(currentDay);
 }
 
-function append(records) {
+function isFiltered(f) {
+  return Boolean(f.text || f.domain || f.reason);
+}
+
+// The nearest day with matching records before ('older') or after ('newer')
+// `day`, or the most recent one ('latest'); null if there is none.
+async function findDay(day, direction) {
+  const f = filters();
+  let range = { from: f.from, to: f.to };
+  if (direction === 'older') range = narrowRange(range, -Infinity, day - 1);
+  if (direction === 'newer') range = narrowRange(range, endOfDay(day) + 1, Infinity);
+  if (range.from !== null && range.to !== null && range.from > range.to) return null;
+  const { records } = await history.query({ ...f, ...range, order: direction === 'newer' ? 'asc' : 'desc', limit: 1 });
+  return records.length ? startOfDay(records[0].closedAt) : null;
+}
+
+// Shows `day` (start of a local day). If it has no matching records any more,
+// falls back to the next older day, then the next newer one.
+async function show(day) {
+  const gen = ++generation;
+  const f = filters();
+  let records = [];
+  if (day !== null) {
+    ({ records } = await history.query({ ...f, ...narrowRange(f, day, endOfDay(day)), limit: Infinity }));
+  }
+  if (day !== null && !records.length) {
+    const fallback = (await findDay(day, 'older')) ?? (await findDay(day, 'newer'));
+    if (gen === generation) show(fallback);
+    return;
+  }
+  const [newer, older] = day === null ? [null, null] : await Promise.all([findDay(day, 'newer'), findDay(day, 'older')]);
+  if (gen !== generation) return;
+  currentDay = day;
+  newerDay = newer;
+  olderDay = older;
+  render(records, f);
+}
+
+function render(records, f) {
   const now = Date.now();
-  for (const record of records) {
-    const day = startOfDay(record.closedAt);
-    if (day !== lastDay) {
-      lastDay = day;
-      currentList = el('div');
-      $('timeline').append(el('section', { class: 'day' }, el('h2', {}, dayLabel(record.closedAt, now)), currentList));
-    }
-    currentList.append(row(record));
-  }
+  $('day-nav').hidden = currentDay === null;
+  $('empty').hidden = currentDay !== null;
+  $('newer').disabled = newerDay === null;
+  $('older').disabled = olderDay === null;
+  $('newer').title = newerDay === null ? '' : dayLabel(newerDay, now);
+  $('older').title = olderDay === null ? '' : dayLabel(olderDay, now);
+  $('day-label').textContent = currentDay === null ? '' : dayLabel(currentDay, now);
+  $('day-count').textContent =
+    currentDay === null ? '' : dayCountText(records.length, currentDay, now, { filtered: isFiltered(f) });
+  $('timeline').replaceChildren(...records.map(row));
 }
 
-async function loadMore() {
-  if (loading || exhausted) return;
-  loading = true;
-  const gen = generation;
-  try {
-    const page = await history.query({ ...filters(), limit: PAGE_SIZE, after: cursor });
-    if (gen === generation) {
-      append(page.records);
-      cursor = page.next;
-      exhausted = !page.next;
-      $('empty').hidden = $('timeline').childElementCount > 0;
-    }
-  } finally {
-    loading = false;
-  }
-  // Filters changed while this page was loading: start over for the new ones.
-  if (gen !== generation) return loadMore();
-  if (!exhausted && isSentinelVisible()) loadMore();
-}
-
-function isSentinelVisible() {
-  return $('sentinel').getBoundingClientRect().top < window.innerHeight + 200;
-}
-
-function reset() {
-  generation++;
-  cursor = null;
-  exhausted = false;
-  lastDay = null;
-  currentList = null;
-  $('timeline').replaceChildren();
-  loadMore();
+// Filters changed: jump to the most recent day that matches them.
+async function reset() {
+  const gen = ++generation;
+  const day = await findDay(null, 'latest');
+  if (gen === generation) show(day);
 }
 
 async function renderDomains() {
@@ -208,9 +208,13 @@ $('clear').addEventListener('click', async () => {
   reset();
 });
 
-new IntersectionObserver((entries) => {
-  if (entries.some((entry) => entry.isIntersecting)) loadMore();
-}, { rootMargin: '200px' }).observe($('sentinel'));
+$('newer').addEventListener('click', () => newerDay !== null && show(newerDay));
+$('older').addEventListener('click', () => olderDay !== null && show(olderDay));
+
+// Coming back to the page: pick up tabs closed meanwhile (e.g. today's count).
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) (currentDay === null || currentDay === startOfDay(Date.now()) ? reset() : show(currentDay));
+});
 
 renderDomains();
 reset();

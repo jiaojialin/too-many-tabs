@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dayLabel, formatClock, groupByDay, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
+import { dayCountText, dayLabel, endOfDay, formatClock, groupByDay, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
 
 const at = (y, m, d, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 const NOW = at(2026, 10, 21, 15, 0);
@@ -40,4 +40,24 @@ test('parseLocalDateTime', () => {
   assert.equal(parseLocalDateTime(''), null);
   assert.equal(parseLocalDateTime('garbage'), null);
   assert.equal(parseLocalDateTime('2026-10-21T14:32', { endOfMinute: true }), at(2026, 10, 21, 14, 32) + 59_999);
+});
+
+test('endOfDay is the last millisecond of the local day, across DST changes too', () => {
+  assert.equal(endOfDay(at(2026, 10, 21, 9)), at(2026, 10, 22, 0) - 1);
+  // US DST ends Nov 1, 2026 and starts Mar 8, 2026 (25- and 23-hour days where observed).
+  assert.equal(endOfDay(at(2026, 11, 1, 12)), new Date(2026, 10, 2).getTime() - 1);
+  assert.equal(endOfDay(at(2026, 3, 8, 12)), new Date(2026, 2, 9).getTime() - 1);
+});
+
+test('narrowRange intersects a filter range with a day', () => {
+  assert.deepEqual(narrowRange({ from: null, to: null }, 10, 20), { from: 10, to: 20 });
+  assert.deepEqual(narrowRange({ from: 15, to: null }, 10, 20), { from: 15, to: 20 });
+  assert.deepEqual(narrowRange({ from: 5, to: 12 }, 10, 20), { from: 10, to: 12 });
+});
+
+test('dayCountText: so far today, closed on past days', () => {
+  assert.equal(dayCountText(12, at(2026, 10, 21, 0), NOW, { locale: 'en-US' }), '12 tabs closed so far today');
+  assert.equal(dayCountText(1, at(2026, 10, 20, 0), NOW, { locale: 'en-US' }), '1 tab closed yesterday');
+  assert.equal(dayCountText(34, at(2026, 10, 19, 0), NOW, { locale: 'en-US' }), '34 tabs closed on Mon, Oct 19, 2026');
+  assert.equal(dayCountText(3, at(2026, 10, 21, 0), NOW, { filtered: true, locale: 'en-US' }), '3 matching tabs closed so far today');
 });
