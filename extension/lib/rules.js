@@ -1,8 +1,8 @@
 // Closing rules. Pure functions: no Chrome APIs, so they're easy to test.
 //
 // `entries` maps tab id -> tracked state ({ lastVisitedAt, loggedOutSince,
-// mutedByUs, normalizedUrl, ... }). `ctx` is { now, activeWindowId,
-// visitedTabId, settings }.
+// mutedByUs, normalizedUrl, ... }). `ctx` is { now, visitedTabId, settings };
+// the visited tab is the selected tab of the active window.
 
 import { isLandingPage } from './landing.js';
 import { isWebUrl, normalizeUrl } from './url.js';
@@ -20,20 +20,16 @@ export function isExempt(tab, entry, ctx) {
     tab.incognito ||
       tab.pinned ||
       (tab.audible && !entry?.mutedByUs) ||
-      tab.windowId === ctx.activeWindowId,
+      tab.id === ctx.visitedTabId,
   );
 }
 
-// Rule 4: a landing-page tab may be closed in the active window too, but
-// never while it is the tab being visited.
+// Rule 4 applies to a non-exempt tab that is still on a landing page.
 export function isLandingCandidate(tab, entry, ctx) {
   return (
     tab.status !== 'loading' &&
     isLandingPage(tab.url ?? '', ctx.settings.landingPages) &&
-    !tab.incognito &&
-    !tab.pinned &&
-    !(tab.audible && !entry?.mutedByUs) &&
-    tab.id !== ctx.visitedTabId
+    !isExempt(tab, entry, ctx)
   );
 }
 
@@ -56,11 +52,11 @@ export function dueReason(tab, entry, ctx) {
 
 // Tabs still loading are left out until they finish (README: "run the
 // duplicate check when loading completes").
-// Of a group of duplicate tabs, the one to keep: a tab in the active window
-// counts as most recently visited; ties go to the newest tab (highest id).
+// Of a group of duplicate tabs, the one to keep: the tab being visited, else
+// the most recently visited; ties go to the newest tab (highest id).
 export function pickDuplicateWinner(group, entries, ctx) {
   const score = (tab) => [
-    tab.windowId === ctx.activeWindowId ? 1 : 0,
+    tab.id === ctx.visitedTabId ? 1 : 0,
     lastVisitedAt(tab, entries[tab.id], ctx),
     tab.id,
   ];

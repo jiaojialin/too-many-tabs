@@ -6,18 +6,25 @@ import { DEFAULT_SETTINGS } from '../extension/lib/settings.js';
 const NOW = 1_000_000_000_000;
 const ACTIVE_WINDOW = 1;
 const OTHER_WINDOW = 2;
+const VISITED = 1;
 // Most tests use a handful of tabs, so the tab limit is lifted unless a test sets it.
 const SETTINGS = { ...DEFAULT_SETTINGS, tabLimit: 0 };
-const ctx = (overrides = {}) => ({ now: NOW, activeWindowId: ACTIVE_WINDOW, visitedTabId: null, settings: SETTINGS, ...overrides });
+const ctx = (overrides = {}) => ({ now: NOW, visitedTabId: null, settings: SETTINGS, ...overrides });
 const tab = (id, props = {}) => ({ id, windowId: OTHER_WINDOW, url: `https://site${id}.test/`, ...props });
 const visitedAgo = (ms, extra = {}) => ({ lastVisitedAt: NOW - ms, loggedOutSince: null, ...extra });
 
-test('isExempt: pinned, audible, active window and incognito tabs', () => {
+test('isExempt: pinned, audible, visited and incognito tabs', () => {
   assert.ok(isExempt(tab(1, { pinned: true }), {}, ctx()));
   assert.ok(isExempt(tab(1, { audible: true }), {}, ctx()));
-  assert.ok(isExempt(tab(1, { windowId: ACTIVE_WINDOW }), {}, ctx()));
+  assert.ok(isExempt(tab(VISITED), {}, ctx({ visitedTabId: VISITED })));
   assert.ok(isExempt(tab(1, { incognito: true }), {}, ctx()));
   assert.ok(!isExempt(tab(1), {}, ctx()));
+});
+
+test('isExempt: other tabs in the active window are not protected', () => {
+  const c = ctx({ visitedTabId: VISITED });
+  assert.ok(!isExempt(tab(2, { windowId: ACTIVE_WINDOW }), {}, c));
+  assert.ok(!isExempt(tab(3, { windowId: OTHER_WINDOW, active: true }), {}, c), 'front tab of another window');
 });
 
 test('isExempt: a tab muted by the extension is not protected by being audible', () => {
@@ -57,7 +64,13 @@ test('decide honours configured thresholds', () => {
 test('decide never closes exempt tabs, however old', () => {
   const old = visitedAgo(48 * HOUR, { loggedOutSince: NOW - 48 * HOUR });
   const tabs = [tab(1, { pinned: true }), tab(2, { audible: true }), tab(3, { windowId: ACTIVE_WINDOW }), tab(4, { incognito: true })];
-  assert.deepEqual(decide(tabs, { 1: old, 2: old, 3: old, 4: old }, ctx()), []);
+  assert.deepEqual(decide(tabs, { 1: old, 2: old, 3: old, 4: old }, ctx({ visitedTabId: 3 })), []);
+});
+
+test('decide closes stale tabs in the active window other than the visited tab', () => {
+  const tabs = [tab(1, { windowId: ACTIVE_WINDOW }), tab(2, { windowId: ACTIVE_WINDOW })];
+  const old = visitedAgo(25 * HOUR);
+  assert.deepEqual(decide(tabs, { 1: old, 2: old }, ctx({ visitedTabId: 1 })).map((c) => [c.tab.id, c.reason]), [[2, 'stale']]);
 });
 
 test('duplicates: keep the most recently visited copy', () => {
@@ -70,17 +83,18 @@ test('duplicates: keep the most recently visited copy', () => {
   );
 });
 
-test('duplicates: a copy in the active window wins and is never closed', () => {
+test('duplicates: the visited copy wins and is never closed', () => {
   const url = 'https://a.test/page';
   const tabs = [tab(1, { url, windowId: ACTIVE_WINDOW }), tab(2, { url })];
   const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE) };
-  assert.deepEqual(decide(tabs, entries, ctx()).map((c) => c.tab.id), [2]);
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 1 })).map((c) => c.tab.id), [2]);
 });
 
-test('duplicates all inside the active window are left alone', () => {
+test('duplicates inside the active window close, keeping the most recently visited', () => {
   const url = 'https://a.test/page';
-  const tabs = [tab(1, { url, windowId: ACTIVE_WINDOW }), tab(2, { url, windowId: ACTIVE_WINDOW })];
-  assert.deepEqual(decide(tabs, { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE) }, ctx()), []);
+  const tabs = [tab(1, { url, windowId: ACTIVE_WINDOW }), tab(2, { url, windowId: ACTIVE_WINDOW }), tab(3, { windowId: ACTIVE_WINDOW })];
+  const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE), 3: visitedAgo(0) };
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 3 })).map((c) => [c.tab.id, c.reason]), [[1, 'duplicate']]);
 });
 
 test('duplicates: pinned or audible losers survive', () => {
@@ -127,7 +141,7 @@ test('nextDeadline returns the earliest closing time of non-exempt tabs', () => 
 });
 
 test('nextDeadline is null when nothing can become closable', () => {
-  assert.equal(nextDeadline([tab(1, { windowId: ACTIVE_WINDOW })], { 1: visitedAgo(0) }, ctx()), null);
+  assert.equal(nextDeadline([tab(1, { windowId: ACTIVE_WINDOW })], { 1: visitedAgo(0) }, ctx({ visitedTabId: 1 })), null);
   assert.equal(nextDeadline([], {}, ctx()), null);
 });
 
@@ -170,7 +184,7 @@ test('Rule 4: unused landing tabs close 10 minutes after the last visit', () => 
   assert.equal(nextDeadline([tabs[2]], entries, ctx()), NOW + MINUTE, 'tab 3 is due in a minute');
 });
 
-test('Rule 4: landing tabs in the active window close, but never the visited tab', () => {
+test('Rule 4: landing tabs close, but never the visited tab', () => {
   const tabs = [tab(1, { url: 'chrome://newtab/', windowId: ACTIVE_WINDOW }), tab(2, { url: 'chrome://newtab/', windowId: ACTIVE_WINDOW })];
   const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(HOUR) };
   assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 2 })).map((c) => c.tab.id), [1]);

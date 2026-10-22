@@ -133,6 +133,17 @@ test('closes older duplicates and keeps the copy in the active window', async ()
   assert.equal(env.history.records[0].reason, 'duplicate');
 });
 
+test('duplicates in the same window close, keeping the tab being visited', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: false, url: 'https://www.gnu.org/licenses/gpl-3.0.html', title: 'GPL' },
+    { id: 2, windowId: 1, index: 1, active: true, url: 'https://www.gnu.org/licenses/gpl-3.0.html', title: 'GPL' },
+  ];
+  const env = setup(tabs);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [1]);
+  assert.equal(env.history.records[0].reason, 'duplicate');
+});
+
 test('only reacts to relevant tab updates', async () => {
   const env = setup(baseTabs());
   assert.equal(env.controller.onTabUpdated(1, { favIconUrl: 'x' }), undefined);
@@ -476,7 +487,11 @@ test('tab limit: with 12 tabs nothing closes and no sweep alarm is set; a 13th t
   assert.equal(env.chrome._state.alarms.has(SWEEP_ALARM), false);
   env.chrome._state.tabs.push({ id: 200, windowId: 1, index: 20, url: 'https://new.test/', active: false, pinned: false, audible: false, incognito: false });
   await env.controller.request();
-  assert.deepEqual(env.chrome._state.removed, [2], 'the long-unvisited tab in the other window closes');
+  assert.deepEqual(
+    env.chrome._state.removed.sort((a, b) => a - b),
+    [2, ...filler(10).map((t) => t.id)],
+    'every long-unvisited tab closes, in any window; the visited tab and the new tab stay',
+  );
 });
 
 test('tab limit does not count incognito tabs and does not affect audio pausing', async () => {

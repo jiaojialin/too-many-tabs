@@ -23,6 +23,7 @@ Requires Chrome 121 or later.
 
 - **Last visited**: the most recent time the tab was the active tab in a focused window. Tracked from `tabs.onActivated` / `windows.onFocusChanged`, falling back to `tab.lastAccessed`.
 - **Active window**: the currently focused normal browser window.
+- **Active tab** (the tab being visited): the selected tab of the active window. Only this one tab is protected from closing; the rest of the active window is not.
 - **Normalized URL**: the URL after:
   1. dropping the `#fragment`,
   2. lower-casing the scheme and host and removing a trailing `/` from the path,
@@ -35,9 +36,9 @@ Requires Chrome 121 or later.
 
 The extension runs once per Chrome profile and covers every tab in every normal window of that profile.
 
-- Only **one** window is the active window (the last-focused one, see Definitions); tabs in all other windows are subject to the closing rules.
+- Only **one** tab is protected as the active tab: the selected tab of the last-focused window (see Definitions). Every other tab, in any window, is subject to the closing rules.
 - Duplicates are compared across all windows.
-- A tab only counts as visited when it is the selected tab of the active window; being the front tab of another window does not count.
+- A tab only counts as visited when it is the selected tab of the active window; being the front tab of another window does not count (it is not protected either).
 - Background audio follows the same rule: a tab keeps playing only if it is the selected tab of the active window (or its site is on the keep-playing list). A video in another window, even one visible on a second monitor, is paused when you work in a different window.
 - The closed-tab history is shared by all windows of the profile.
 - Not covered: other Chrome profiles (each needs its own install), incognito windows, and popup/app windows.
@@ -48,7 +49,7 @@ The extension never auto-closes:
 
 - pinned tabs,
 - audible tabs (playing sound),
-- any tab in the active window (one exception: Rule 4 may close unused landing-page tabs there, but never the tab you are looking at),
+- the active tab: the tab you are looking at (the selected tab of the active window). Other tabs in the active window are **not** exempt,
 - any incognito tab (incognito is ignored entirely).
 
 ## Rules
@@ -57,7 +58,7 @@ The extension never auto-closes:
 
 Auto-closing only takes effect while **more than 12 tabs** (configurable) are open in the profile. People can manage 12 tabs themselves.
 
-- Counted: every tab in every normal window of the profile, including pinned tabs and tabs in the active window. Incognito tabs don't count.
+- Counted: every tab in every normal window of the profile, including pinned tabs and the active tab. Incognito tabs don't count.
 - At or under the limit, nothing is auto-closed and no `sweep` alarm is scheduled; opening another tab triggers a new check.
 - Over the limit, every closing rule applies in full. The limit is an on/off switch, not a floor: with 15 tabs of which 5 are due, all 5 close, even though that leaves 10.
 - Background audio pausing is not affected by the limit (it doesn't close anything).
@@ -83,8 +84,8 @@ Behavior:
 
 Tabs whose **normalized URLs** are equal are duplicates. Keep only the **most recently visited** one and close the others.
 
-- A tab in the active window counts as the most recently visited (it is being visited), so it always survives; duplicates in other windows are closed.
-- Duplicates that are all inside the active window are not closed (global exemption).
+- The active tab counts as the most recently visited (it is being visited), so it always survives.
+- Duplicates are closed in any window, including the active window: two copies side by side in the window you are using are reduced to one.
 - Pinned/audible duplicates are never closed.
 
 ### Rule 3: Stale tabs
@@ -105,7 +106,7 @@ Close tabs that are still on an empty or landing page **10 minutes after they we
 - Pattern format: `host` or `host/path` (a leading `www.` is ignored, `*.` matches subdomains, `google.*` matches any Google country domain); full URLs such as `chrome://newtab` or `about:blank` match exactly.
 - A site's general home page (e.g. `nytimes.com/`) is **not** a landing page by default; add it to the list if wanted.
 - **"Did nothing"** means the tab is still on the landing page: it matches only the page itself, not search results (any `q`, `p`, `wd`, `query` or `text` parameter, or a `#q=` fragment, means a search was made). The extension can't see text typed into a search box but not submitted.
-- **Active window**: unlike the other rules, a landing-page tab in the active window can be closed, except the tab currently being visited. Pinned, audible and incognito tabs are still exempt, and Rule 0 (tab limit) applies.
+- The global exemptions apply: the active tab, pinned, audible and incognito tabs are kept, and Rule 0 (tab limit) applies.
 - Tabs still loading are never closed by this rule.
 - History reason: `empty`.
 
@@ -182,7 +183,7 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 | `runtime.onStartup` | re-match restored tabs to stored state by URL + position |
 
 - The active tab of the active window counts as being visited continuously; its last-visited time is updated when you leave it.
-- **Active window** = the last-focused normal, non-incognito Chrome window. It stays the active window when Chrome loses focus to another app. If an incognito window has focus, the previous active window is kept; if that is gone too, some open window is protected rather than none.
+- **Active window** = the last-focused normal, non-incognito Chrome window. It stays the active window when Chrome loses focus to another app. If an incognito window has focus, the previous active window is kept; if that is gone too, some open window is used, so its selected tab is protected rather than none.
 
 ### Deadline-driven sweep
 
@@ -210,24 +211,24 @@ now = Date.now()
 tabs = all tabs in normal (non-incognito) windows
 activeWindow = last-focused normal window
 
+activeTab = selected tab of activeWindow
+
 exempt(tab) = tab.pinned
            or (tab.audible and not tab.mutedByUs)
-           or tab.windowId == activeWindow
+           or tab == activeTab
            or tab.incognito
 
 if number of tabs <= tabLimit: close nothing, clear the sweep alarm, stop
 
 for each tab:
   idle = now - lastVisitedAt(tab)
-  if isLandingPage(tab) and not landingExempt(tab):   # pinned/audible/incognito/visited
-    if idle >= 10 min                         -> close(tab, "empty")
-    continue
   if exempt(tab): continue
+  if isLandingPage(tab) and idle >= 10 min    -> close(tab, "empty")
   if loggedOutSince(tab) and idle >= 30 min  -> close(tab, "logged-out")
   else if idle >= 24 h                        -> close(tab, "stale")
 
 for each group of tabs sharing a normalizedUrl (size > 1):
-  winner = the tab in the active window if there is one,
+  winner = the active tab if it is in the group,
            otherwise the tab with the latest lastVisitedAt
   for each other tab in the group, if not exempt -> close(tab, "duplicate")
 ```
