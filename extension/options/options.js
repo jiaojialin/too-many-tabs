@@ -10,7 +10,7 @@ import {
 
 const ALL_URLS = { origins: ['<all_urls>'] };
 const $ = (id) => document.getElementById(id);
-const NUMBER_FIELDS = ['tabLimit', 'loggedOutMinutes', 'landingIdleMinutes', 'staleHours', 'audioPauseDelaySeconds'];
+const NUMBER_FIELDS = ['loggedOutMinutes', 'landingIdleMinutes', 'staleHours', 'audioPauseDelaySeconds'];
 
 function fill(settings) {
   for (const id of NUMBER_FIELDS) $(id).value = settings[id];

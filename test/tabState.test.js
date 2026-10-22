@@ -20,6 +20,25 @@ test('refreshEntry detects a logout transition and tracks position', () => {
   assert.equal(next.normalizedUrl, 'https://bank.test/login');
 });
 
+test('newEntry records when the tab was opened', () => {
+  const entry = newEntry(tab(1, 'https://a.test/'), 42);
+  assert.equal(entry.openedAt, 42);
+  assert.equal(entry.enteredAt, null);
+});
+
+test('refreshEntry: navigating to another page counts as opening it; a fragment change does not', () => {
+  const entry = newEntry(tab(1, 'https://a.test/x'), 1);
+  assert.equal(refreshEntry(entry, tab(1, 'https://a.test/x#top'), 50).openedAt, 1);
+  assert.equal(refreshEntry(entry, tab(1, 'https://a.test/y'), 50).openedAt, 50);
+});
+
+test('refreshEntry backfills openedAt for entries stored before it existed', () => {
+  const legacy = { url: 'https://a.test/', title: '', normalizedUrl: 'https://a.test', lastVisitedAt: 7, settled: true };
+  const next = refreshEntry(legacy, tab(1, 'https://a.test/'), 99);
+  assert.equal(next.openedAt, 7);
+  assert.equal(next.enteredAt, null);
+});
+
 test('refreshEntry leaves an unchanged tab alone', () => {
   const entry = { ...newEntry(tab(1, 'https://bank.test/login'), 1), loggedOutSince: 7, loginLike: true };
   assert.equal(refreshEntry(entry, tab(1, 'https://bank.test/login'), 99).loggedOutSince, 7);

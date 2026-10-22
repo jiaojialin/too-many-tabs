@@ -91,6 +91,9 @@ export function createController({ chrome, history, now = () => Date.now(), time
 
     const visited = tabs.find((tab) => tab.active && tab.windowId === state.activeWindowId);
     const visitedTabId = visited?.id ?? null;
+    // After a restart or reload nothing was being tracked, so the selected
+    // tab wasn't really switched to now; don't let that win a duplicate group.
+    const entered = state.visitedTabId !== null && state.visitedTabId !== visitedTabId;
     if (state.visitedTabId !== visitedTabId) {
       const left = state.entries[state.visitedTabId];
       if (left) left.lastVisitedAt = t;
@@ -103,7 +106,10 @@ export function createController({ chrome, history, now = () => Date.now(), time
       const entry = old ? refreshEntry(old, tab, t, settings.siteRules) : newEntry(tab, t, settings.siteRules);
       entries[tab.id] = syncAudioFlags(entry, tab, chrome.runtime.id);
     }
-    if (visited) entries[visited.id].lastVisitedAt = t;
+    if (visited) {
+      entries[visited.id].lastVisitedAt = t;
+      if (entered) entries[visited.id].enteredAt = t;
+    }
     state.entries = entries;
 
     const ctx = { now: t, visitedTabId, settings };

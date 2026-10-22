@@ -37,11 +37,8 @@ test('toggleHost adds and removes without duplicates', () => {
   assert.deepEqual(toggleHost(['youtube.com', 'b.test'], 'music.youtube.com', false), ['b.test'], 'removes covering patterns');
 });
 
-test('mergeSettings validates the tab limit', () => {
-  assert.equal(mergeSettings({}).tabLimit, 12);
-  assert.equal(mergeSettings({ tabLimit: 0 }).tabLimit, 0);
-  assert.equal(mergeSettings({ tabLimit: -3 }).tabLimit, 12);
-  assert.equal(mergeSettings({ tabLimit: 2.5 }).tabLimit, 12);
+test('mergeSettings drops the removed tab limit', () => {
+  assert.equal('tabLimit' in mergeSettings({ tabLimit: 12 }), false);
 });
 
 test('mergeSettings caps the audio pause delay', () => {
