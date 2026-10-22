@@ -39,7 +39,7 @@ The extension runs once per Chrome profile and covers every tab in every normal 
 - Only **one** tab is protected as the active tab: the selected tab of the last-focused window (see Definitions). Every other tab, in any window, is subject to the closing rules.
 - Duplicates are compared across all windows.
 - A tab only counts as visited when it is the selected tab of the active window; being the front tab of another window does not count (it is not protected either).
-- Background audio follows the same rule: a tab keeps playing only if it is the selected tab of the active window (or its site is on the keep-playing list). A video in another window, even one visible on a second monitor, is paused when you work in a different window.
+- Background audio follows the same rule when more than one tab is playing: the selected tab of the active window plays (or, if it is silent, the most recently visited playing tab), plus sites on the keep-playing list. A video in another window, even one visible on a second monitor, is paused when you play something in a different window. A single playing tab is never paused.
 - The closed-tab history is shared by all windows of the profile.
 - Not covered: other Chrome profiles (each needs its own install), incognito windows, and popup/app windows.
 
@@ -112,13 +112,14 @@ Close tabs that are still on an empty, landing or sign-in page **10 minutes afte
 
 ## Background audio pausing
 
-When the user switches to a **different tab in Chrome** while a non-selected tab is playing sound, the extension pauses that tab's playback.
+When the user switches to a **different tab in Chrome** while a non-selected tab is playing sound, and **another tab is playing too**, the extension pauses the extra playback so only one tab makes sound.
 
-- **Trigger**: a tab is `audible` and is not the active tab in the last-focused Chrome window. Chrome losing focus to another application does **not** trigger pausing.
+- **Only one tab plays, and a lone tab is left alone**: the tab allowed to keep playing is the selected tab of the active window if it is playing, otherwise the **most recently visited** playing tab. So if just one tab makes sound (e.g. a Google Meet call you switch away from to look something up in Gmail), it is never paused or muted, and since it is audible it is never auto-closed either. Tabs on the keep-playing list and tabs the user muted don't count as competition.
+- **Trigger**: a tab is `audible`, is not the active tab in the last-focused Chrome window, and is not the tab allowed to keep playing. Chrome losing focus to another application does **not** trigger pausing.
 - **Delay**: pause after a **2 second** grace period (configurable, 1–25 s; longer delays aren't reliable because Chrome may suspend the idle service worker), so quick tab switching doesn't stutter playback. If the tab becomes active again within the delay, nothing happens.
 - **Pause**: inject a script (`chrome.scripting.executeScript`, all frames) that calls `.pause()` on every playing `<video>`/`<audio>` element and marks those elements as paused by the extension.
 - **Fallback mute**: if the tab is still audible shortly after the pause attempt (Web Audio, custom players, sites that auto-resume, or the script could not be injected), mute the tab with `chrome.tabs.update({ muted: true })`.
-- **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused. The same happens in the background if the site is added to the keep-playing list or the feature is turned off.
+- **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused. The same happens in the background if the site is added to the keep-playing list or the feature is turned off. A tab the extension **muted** is also unmuted in the background when it becomes the only one making sound (it kept playing under the mute); a tab whose media was **paused** stays paused until you visit it.
 - **Staying in sync**: if the user unmutes a tab the extension muted, it is treated as a normal audible tab again. If a paused page starts playing again on its own, it is paused again after the delay. Pause markers are dropped on navigation and after a browser restart.
 - **Keep-playing list**: a user-editable list of sites (by host) that are never paused, with a one-click "Let this site keep playing" toggle in the popup.
 - **Permissions**: pausing needs host permission for all sites; it is an **optional** permission, requested when the user turns the feature on (or clicks **Allow pausing media**) in Settings. The feature is on by default, and without that permission the extension falls back to muting.

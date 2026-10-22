@@ -426,7 +426,7 @@ test('settings thresholds are applied', async () => {
 
 test('pauses a background tab after the delay and resumes it on return', async () => {
   const tabs = [
-    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://music.test/', audible: true }, // another tab is playing
     { id: 2, windowId: 1, index: 1, active: false, url: 'https://video.test/', audible: true },
   ];
   const env = setup(tabs, { hostAccess: true });
@@ -462,7 +462,7 @@ test('switching back within the delay cancels the pause', async () => {
 
 test('mutes instead of pausing without host access, and unmutes on return', async () => {
   const tabs = [
-    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://music.test/', audible: true }, // another tab is playing
     { id: 2, windowId: 1, index: 1, active: false, url: 'https://game.test/', audible: true },
   ];
   const env = setup(tabs);
@@ -477,7 +477,7 @@ test('mutes instead of pausing without host access, and unmutes on return', asyn
 
 test('mutes when the page is still audible after pausing', async () => {
   const tabs = [
-    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://music.test/', audible: true }, // another tab is playing
     { id: 2, windowId: 1, index: 1, active: false, url: 'https://synth.test/', audible: true },
   ];
   const env = setup(tabs, { hostAccess: true });
@@ -489,7 +489,7 @@ test('mutes when the page is still audible after pausing', async () => {
 
 test('a tab muted by the extension is no longer exempt from closing', async () => {
   const tabs = [
-    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://music.test/', audible: true }, // another tab is playing
     { id: 2, windowId: 2, index: 0, active: true, url: 'https://game.test/', audible: true },
   ];
   const env = setup(tabs);
@@ -523,8 +523,54 @@ test('concurrent requests are coalesced into serial passes', async () => {
   assert.equal(calls, 2);
 });
 
+test('a call you switch away from keeps playing when nothing else does', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://meet.google.com/abc-defg-hij', audible: true },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'https://mail.google.com/mail/u/0/' },
+  ];
+  const env = setup(tabs, { hostAccess: true });
+  await env.controller.request();
+  env.tab(1).active = false;
+  env.tab(2).active = true;
+  await env.controller.request();
+  await env.timers.runAll();
+  assert.deepEqual(env.chrome._state.scripts, [], 'not paused');
+  assert.deepEqual(env.chrome._state.updates, [], 'not muted');
+  env.advance(25 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [], 'audible, so never closed');
+});
+
+test('a second sound source in the background is paused; the call keeps playing', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: false, url: 'https://meet.google.com/abc-defg-hij', audible: true },
+    { id: 2, windowId: 1, index: 1, active: true, url: 'https://mail.google.com/mail/u/0/' },
+    { id: 3, windowId: 1, index: 2, active: false, url: 'https://video.test/' },
+  ];
+  const env = setup(tabs, { hostAccess: true });
+  await env.controller.request();
+  // The user was on the call, then switched to mail; later a video autoplays.
+  env.chrome.storage.local.data[STATE_KEY].entries[3].lastVisitedAt = env.now - HOUR;
+  env.advance(MINUTE);
+  env.tab(3).audible = true;
+  await env.controller.request();
+  await env.timers.runAll();
+  assert.deepEqual(env.chrome._state.scripts, [[3, 'pauseMediaInPage']]);
+});
+
+test('a tab we muted is unmuted when the competing sound stops', async () => {
+  const env = setup(audioTabs());
+  await env.controller.request();
+  await env.timers.runAll();
+  assert.equal(env.tab(2).mutedInfo.muted, true);
+  env.tab(1).audible = false;
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.updates.at(-1), [2, { muted: false }]);
+});
+
+// Tab 1 (visited) is playing too, so background tab 2 has competition.
 const audioTabs = (url = 'https://game.test/') => [
-  { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+  { id: 1, windowId: 1, index: 0, active: true, url: 'https://music.test/', audible: true },
   { id: 2, windowId: 2, index: 0, active: true, url, audible: true },
 ];
 
@@ -574,7 +620,7 @@ test('turning audio pausing off unmutes tabs the extension muted', async () => {
 
 test('returning to a paused tab cancels its pending mute check', async () => {
   const tabs = [
-    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://music.test/', audible: true }, // another tab is playing
     { id: 2, windowId: 1, index: 1, active: false, url: 'https://video.test/', audible: true },
   ];
   const env = setup(tabs, { hostAccess: true });

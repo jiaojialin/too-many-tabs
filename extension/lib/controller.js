@@ -2,7 +2,7 @@
 // reconcile(): refresh tracked state, handle background audio, close due tabs,
 // then schedule the next sweep for the next deadline (README "Design").
 
-import { isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
+import { audioKeeperId, isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
 import { recordFromTab } from './db.js';
 import { decide, lastVisitedAt, nextDeadline } from './rules.js';
 import { SETTINGS_KEY, mergeSettings } from './settings.js';
@@ -113,6 +113,7 @@ export function createController({ chrome, history, now = () => Date.now(), time
     state.entries = entries;
 
     const ctx = { now: t, visitedTabId, settings };
+    ctx.audioKeeperId = audioKeeperId(tabs, state.entries, ctx);
     await handleAudio(tabs, state.entries, ctx, ops);
 
     for (const { tab, reason } of decide(tabs, state.entries, ctx)) {
