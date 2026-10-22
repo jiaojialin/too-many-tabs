@@ -78,3 +78,11 @@ export function isSignedOutPage({ url, title }) {
     SIGN_IN_TITLE_PATTERN.test(title ?? '');
   return signedOut && !signIn;
 }
+
+// A sign-in page, judged by its address only (host + path + #route): an
+// article titled "How to sign in" is not one. Rule 4 treats these like
+// landing pages.
+export function isSignInPage({ url }) {
+  const parsed = webUrl(url ?? '');
+  return Boolean(parsed) && SIGN_IN_URL_PATTERN.test(`${parsed.hostname}${parsed.pathname}${parsed.hash}`);
+}

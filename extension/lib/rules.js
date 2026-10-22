@@ -5,7 +5,7 @@
 // the visited tab is the selected tab of the active window.
 
 import { isLandingPage } from './landing.js';
-import { isSignedOutPage } from './logout.js';
+import { isSignInPage, isSignedOutPage } from './logout.js';
 import { isWebUrl, normalizeUrl } from './url.js';
 
 export const MINUTE = 60 * 1000;
@@ -25,11 +25,12 @@ export function isExempt(tab, entry, ctx) {
   );
 }
 
-// Rule 4 applies to a non-exempt tab that is still on a landing page.
+// Rule 4 applies to a non-exempt tab that is still on a landing page or a
+// sign-in page.
 export function isLandingCandidate(tab, entry, ctx) {
   return (
     tab.status !== 'loading' &&
-    isLandingPage(tab.url ?? '', ctx.settings.landingPages) &&
+    (isLandingPage(tab.url ?? '', ctx.settings.landingPages) || isSignInPage(tab)) &&
     !isExempt(tab, entry, ctx)
   );
 }
@@ -106,7 +107,7 @@ export function decide(tabs, entries, ctx) {
     const entry = entries[tab.id];
     if (isLandingCandidate(tab, entry, ctx)) {
       if (ctx.now - lastVisitedAt(tab, entry, ctx) >= landingLimit) {
-        closures.push({ tab, reason: 'empty' });
+        closures.push({ tab, reason: entry?.loggedOutSince ? 'logged-out' : 'empty' });
         closing.add(tab.id);
         continue;
       }
