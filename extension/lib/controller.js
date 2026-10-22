@@ -106,7 +106,7 @@ export function createController({ chrome, history, now = () => Date.now(), time
     if (visited) entries[visited.id].lastVisitedAt = t;
     state.entries = entries;
 
-    const ctx = { now: t, activeWindowId: state.activeWindowId, visitedTabId, settings };
+    const ctx = { now: t, visitedTabId, settings };
     await handleAudio(tabs, state.entries, ctx, ops);
 
     for (const { tab, reason } of decide(tabs, state.entries, ctx)) {
