@@ -91,8 +91,10 @@ export function createController({ chrome, history, now = () => Date.now(), time
 
     const visited = tabs.find((tab) => tab.active && tab.windowId === state.activeWindowId);
     const visitedTabId = visited?.id ?? null;
-    const entered = state.visitedTabId !== visitedTabId;
-    if (entered) {
+    // After a restart or reload nothing was being tracked, so the selected
+    // tab wasn't really switched to now; don't let that win a duplicate group.
+    const entered = state.visitedTabId !== null && state.visitedTabId !== visitedTabId;
+    if (state.visitedTabId !== visitedTabId) {
       const left = state.entries[state.visitedTabId];
       if (left) left.lastVisitedAt = t;
       state.visitedTabId = visitedTabId;

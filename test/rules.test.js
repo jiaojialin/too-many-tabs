@@ -88,11 +88,36 @@ test('duplicates: keep the most recently visited copy', () => {
   );
 });
 
-test('duplicates: the visited copy wins and is never closed', () => {
+test('duplicates: the visited copy is never closed, and a fresher copy stays beside it', () => {
   const url = 'https://a.test/page';
   const tabs = [tab(1, { url, windowId: ACTIVE_WINDOW }), tab(2, { url })];
+  const entries = { 1: visitedAgo(0, { openedAt: NOW - HOUR, enteredAt: NOW - HOUR }), 2: visitedAgo(MINUTE, { openedAt: NOW - MINUTE }) };
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 1 })), []);
+  entries[1].enteredAt = NOW - 30 * 1000;
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 1 })).map((c) => c.tab.id), [2], 'switched to after 2 opened');
+});
+
+test('duplicates: the copy most recently opened or switched to wins', () => {
+  const tabs = [tab(1), tab(2), tab(3)];
+  const entries = {
+    1: visitedAgo(0, { openedAt: NOW - 3 * HOUR, enteredAt: NOW - MINUTE }),
+    2: visitedAgo(0, { openedAt: NOW - 2 * MINUTE }),
+    3: visitedAgo(0, { openedAt: NOW - HOUR, enteredAt: null }),
+  };
+  assert.equal(pickDuplicateWinner(tabs, entries, ctx()).id, 1);
+  entries[2].openedAt = NOW;
+  assert.equal(pickDuplicateWinner(tabs, entries, ctx()).id, 2);
+});
+
+test('pickDuplicateWinner: without opened/entered times, uses the stored last visit, not "visited now"', () => {
+  const tabs = [tab(1), tab(2)];
   const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE) };
-  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 1 })).map((c) => c.tab.id), [2]);
+  assert.equal(pickDuplicateWinner(tabs, entries, ctx({ visitedTabId: 1 })).id, 2);
+});
+
+test('pickDuplicateWinner: ties go to the visited tab', () => {
+  const same = visitedAgo(MINUTE, { openedAt: NOW - MINUTE });
+  assert.equal(pickDuplicateWinner([tab(5), tab(9)], { 5: same, 9: same }, ctx({ visitedTabId: 5 })).id, 5);
 });
 
 test('duplicates inside the active window close, keeping the most recently visited', () => {

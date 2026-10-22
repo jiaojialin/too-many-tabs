@@ -183,6 +183,21 @@ test('a newer copy opened in the background closes the visited copy once you lea
   assert.deepEqual(env.chrome._state.removed, [1]);
 });
 
+test('a restart does not make the selected tab beat a newer background copy', async () => {
+  const env = setup([page(1, { active: true }), page(2)]);
+  env.chrome.storage.local.data[STATE_KEY] = {
+    entries: {
+      1: { url: 'https://a.test/page', title: 'A', normalizedUrl: 'https://a.test/page', index: 1, windowId: 1, lastVisitedAt: env.now - MINUTE, openedAt: env.now - HOUR, enteredAt: env.now - HOUR, settled: true },
+      2: { url: 'https://a.test/page', title: 'A', normalizedUrl: 'https://a.test/page', index: 2, windowId: 1, lastVisitedAt: env.now - 2 * MINUTE, openedAt: env.now - 2 * MINUTE, enteredAt: null, settled: true },
+    },
+    visitedTabId: 1,
+    activeWindowId: 1,
+  };
+  await env.controller.request(); // no session flag yet: treated as a new browser session
+  assert.deepEqual(env.chrome._state.removed, []);
+  assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[1].enteredAt, env.now - HOUR);
+});
+
 test('only reacts to relevant tab updates', async () => {
   const env = setup(baseTabs());
   assert.equal(env.controller.onTabUpdated(1, { favIconUrl: 'x' }), undefined);

@@ -58,11 +58,11 @@ export function dueReason(tab, entry, ctx) {
 
 // Tabs still loading are left out until they finish (README: "run the
 // duplicate check when loading completes").
-// When a copy was last opened or switched to. Entries stored before these
-// fields existed fall back to the last-visited time.
+// When a copy was last opened or switched to. Without either (no entry yet)
+// it falls back to the stored last visit, never to "being visited now".
 function freshness(tab, entry, ctx) {
   const latest = Math.max(entry?.openedAt ?? 0, entry?.enteredAt ?? 0);
-  return latest || lastVisitedAt(tab, entry, ctx);
+  return latest || (entry?.lastVisitedAt ?? tab.lastAccessed ?? ctx.now);
 }
 
 // Of a group of duplicate tabs, the one to keep: the copy most recently opened

@@ -41,7 +41,14 @@ export function newEntry(tab, now, siteRules = []) {
 export function refreshEntry(entry, tab, now, siteRules = []) {
   const url = tab.url ?? '';
   const title = tab.title ?? '';
-  const next = { ...entry, windowId: tab.windowId, index: tab.index };
+  // Entries stored before `openedAt` existed get it backfilled once.
+  const next = {
+    ...entry,
+    openedAt: entry.openedAt ?? entry.lastVisitedAt ?? now,
+    enteredAt: entry.enteredAt ?? null,
+    windowId: tab.windowId,
+    index: tab.index,
+  };
   if (tab.status === 'loading') return next;
   if (url !== entry.url || title !== entry.title || entry.settled === false) {
     const prev = entry.settled === false ? undefined : entry;
@@ -53,6 +60,8 @@ export function refreshEntry(entry, tab, now, siteRules = []) {
     });
     // A new document has none of the media we paused.
     if (url !== entry.url) next.pausedByUs = false;
+    // Navigating to another page counts as opening that page now.
+    if (next.normalizedUrl !== entry.normalizedUrl) next.openedAt = now;
   }
   return next;
 }
