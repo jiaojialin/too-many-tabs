@@ -209,6 +209,14 @@ test('Rule 4: pinned, audible, incognito and loading landing tabs are kept', () 
   assert.ok(!isLandingCandidate(tab(5, { url: 'https://www.google.com/search?q=x' }), old, ctx()), 'a search was made');
 });
 
+test('Rule 4: sign-in pages are candidates; the visited one is kept', () => {
+  const url = 'https://bank.test/signin';
+  const tabs = [tab(1, { url }), tab(2, { url: 'https://bank2.test/login' }), tab(3, { url: 'https://bank3.test/login', pinned: true })];
+  const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(HOUR, { loggedOutSince: NOW - HOUR }), 3: visitedAgo(HOUR) };
+  assert.deepEqual(decide(tabs, entries, ctx()).map((c) => [c.tab.id, c.reason]), [[1, 'empty'], [2, 'logged-out']]);
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 1 })).map((c) => c.tab.id), [2]);
+});
+
 test('Rule 4: the tab limit still applies', () => {
   const tabs = [tab(1, { url: 'chrome://newtab/' })];
   assert.deepEqual(decide(tabs, { 1: visitedAgo(HOUR) }, ctx({ settings: DEFAULT_SETTINGS })), []);

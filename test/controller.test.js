@@ -82,7 +82,8 @@ test('a near deadline is handled with a timer as well as the alarm', async () =>
 test('closes a logged-out tab 30 minutes after its last visit', async () => {
   const env = setup(baseTabs());
   await env.controller.request();
-  Object.assign(env.tab(2), { url: 'https://other.test/login', title: 'Sign in' });
+  // Only the title changes, so this isn't a sign-in URL (Rule 4).
+  Object.assign(env.tab(2), { title: 'Sign in' });
   env.advance(5 * MINUTE);
   await env.controller.request();
   env.advance(25 * MINUTE - 1);
@@ -250,18 +251,33 @@ test('a new tab opened straight onto a sign-out page is not treated as logged ou
   assert.deepEqual(env.chrome._state.removed, []);
 });
 
-test('a logout from a sign-in page waits 30 minutes after the last visit', async () => {
+test('a logout to a sign-in URL closes 10 minutes after the last visit (Rule 4)', async () => {
   const env = setup(baseTabs());
   await env.controller.request();
   Object.assign(env.tab(2), { url: 'https://other.test/login', title: 'Sign in' });
   await env.controller.request();
   assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[2].loggedOutSince, env.now);
-  env.advance(29 * MINUTE);
+  env.advance(10 * MINUTE - 1);
   await env.controller.request();
   assert.deepEqual(env.chrome._state.removed, []);
-  env.advance(MINUTE);
+  env.advance(1);
   await env.controller.request();
   assert.deepEqual(env.chrome._state.removed, [2]);
+  assert.equal(env.history.records[0].reason, 'logged-out');
+});
+
+test('a sign-in page opened directly closes 10 minutes after the last visit', async () => {
+  const env = setup([
+    ...baseTabs(),
+    { id: 3, windowId: 2, index: 1, active: false, title: 'Log In',
+      url: 'https://digital.fidelity.com/prgw/digital/signin/retail?AuthRedUrl=https:%2F%2Fdigital.fidelity.com%2Fftgw%2Fdigital%2Fportfolio%2Fsummary' },
+  ]);
+  await env.controller.request();
+  assert.equal(env.chrome._state.alarms.get(SWEEP_ALARM).when, env.now + 10 * MINUTE);
+  env.advance(10 * MINUTE);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [3]);
+  assert.equal(env.history.records[0].reason, 'empty');
 });
 
 test('a tab already on a sign-out page when first seen is closed, but not while being visited', async () => {

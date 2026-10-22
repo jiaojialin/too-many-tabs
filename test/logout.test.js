@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isLoginLike, isLoginLikeTitle, isLoginLikeUrl, isSignedOutPage, nextLogoutState } from '../extension/lib/logout.js';
+import { isLoginLike, isLoginLikeTitle, isLoginLikeUrl, isSignInPage, isSignedOutPage, nextLogoutState } from '../extension/lib/logout.js';
 import { DEFAULT_SITE_RULES } from '../extension/lib/settings.js';
 
 test('isLoginLikeUrl recognizes login, logout and timeout URLs', () => {
@@ -111,4 +111,23 @@ test('nextLogoutState flags a same-site move from a sign-in page to a sign-out p
   const prev = { url: 'https://bank.test/login', loginLike: true, loggedOutSince: null };
   assert.equal(nextLogoutState(prev, { url: 'https://bank.test/session-expired', title: '' }, 7).loggedOutSince, 7);
   assert.equal(nextLogoutState(prev, { url: 'https://other.test/logout', title: '' }, 7).loggedOutSince, null, 'another site');
+});
+
+test('isSignInPage: judged by host, path and #route only', () => {
+  for (const url of [
+    'https://digital.fidelity.com/prgw/digital/signin/retail?AuthRedUrl=https:%2F%2Fdigital.fidelity.com%2Fftgw%2Fdigital%2Fportfolio%2Fsummary',
+    'https://secure.chase.com/web/auth/#/logon/logon/chaseOnline',
+    'https://github.com/login',
+    'https://login.microsoftonline.com/common/oauth2',
+  ]) {
+    assert.ok(isSignInPage({ url }), url);
+  }
+  for (const url of [
+    'https://www.google.com/search?q=login',
+    'https://news.test/article?from=signin',
+    'https://bank.test/logout',
+    'chrome://signin-internals',
+  ]) {
+    assert.ok(!isSignInPage({ url }), url);
+  }
 });

@@ -68,7 +68,8 @@ Auto-closing only takes effect while **more than 12 tabs** (configurable) are op
 Detect tabs whose site has signed the user out (after inactivity, common on banking/finance sites such as Chase and Fidelity, or because the user logged out) and close them:
 
 - **On a sign-out page**: close **immediately**, regardless of when the tab was last visited. Once you're logged out, the tab has no further use. A sign-out page has `logout`, `logoff`, `signout`, `timeout` or `session-expired` in its address (host, path or `#` route; not the query string, so a search for "session timeout" doesn't count), e.g. `https://www.fidelity.com/customer-service/customer-logout`, or a title saying it already happened ("Signed out", "Logged off", "Session expired"). A page that also offers to sign in again (`login`/`signin` in the URL, "Sign in"/"Log on" in the title) is treated as a sign-in page.
-- **On a sign-in page** (login, logon, sign in): close **30 minutes after the tab was last visited** (configurable). The delay protects a sign-in you are in the middle of, e.g. while fetching a 2FA code from another tab.
+- **On a sign-in page** (`login`, `logon`, `signin` in the address): closed by Rule 4 like a landing page, **10 minutes after the tab was last visited**, logged out or not. History reason `logged-out` if a logout was detected, otherwise `empty`.
+- **Otherwise** (a logout detected only from the title or a site rule): close **30 minutes after the tab was last visited** (configurable).
 - The global exemptions still apply: the tab you are looking at is never closed, so a sign-out page closes as soon as you switch away from it. Rule 0 (tab limit) applies.
 - A tab counts as logged out after a same-site transition (below), including from a sign-in page to a sign-out page. A tab that is already on a sign-out page when the extension first sees it (e.g. open before the extension was installed) also counts. A sign-out page opened from another site (e.g. an article about logging out, or a cross-domain SSO logout) does not.
 
@@ -101,19 +102,20 @@ Close any tab that has not been visited for **24 hours** (configurable).
 - Tabs already discarded (unloaded) by Chrome are included.
 - After a browser restart, restored tabs keep their stored last-visited time when it can be matched (by URL and position); otherwise the restore time is used, so tabs are never closed on startup just because their history was lost.
 
-### Rule 4: Empty and landing-page tabs
+### Rule 4: Empty, landing-page and sign-in tabs
 
-Close tabs that are still on an empty or landing page **10 minutes after they were last visited** (configurable). The user opened them but did nothing with them.
+Close tabs that are still on an empty, landing or sign-in page **10 minutes after they were last visited** (configurable). The user opened them but did nothing with them.
 
 - **Landing pages** come from a built-in, user-editable list (Settings, one pattern per line):
   - `chrome://newtab`, `chrome://new-tab-page`, `about:blank`
   - search engine home pages: `google.*` (any Google country domain, e.g. google.com, google.co.uk), `google.*/webhp`, `bing.com`, `duckduckgo.com`, `search.yahoo.com`, `baidu.com`
 - Pattern format: `host` or `host/path` (a leading `www.` is ignored, `*.` matches subdomains, `google.*` matches any Google country domain); full URLs such as `chrome://newtab` or `about:blank` match exactly.
+- **Sign-in pages** are treated as landing pages: any page with `login`, `logon`, `signin` or `sign-on` in its host, path or `#` route, e.g. `https://digital.fidelity.com/prgw/digital/signin/retail?AuthRedUrl=...`. The query string and title don't count, so a search for "login" or an article titled "How to sign in" is not a sign-in page. If you leave a sign-in half done in a background tab (e.g. while fetching a 2FA code), it is closed after 10 minutes.
 - A site's general home page (e.g. `nytimes.com/`) is **not** a landing page by default; add it to the list if wanted.
 - **"Did nothing"** means the tab is still on the landing page: it matches only the page itself, not search results (any `q`, `p`, `wd`, `query` or `text` parameter, or a `#q=` fragment, means a search was made). The extension can't see text typed into a search box but not submitted.
 - The global exemptions apply: the active tab, pinned, audible and incognito tabs are kept, and Rule 0 (tab limit) applies.
 - Tabs still loading are never closed by this rule.
-- History reason: `empty`.
+- History reason: `empty` (shown as **Unused**), or `logged-out` for a sign-in page reached by a detected logout.
 
 ## Background audio pausing
 
@@ -195,8 +197,8 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 Instead of polling on a fixed interval, the extension schedules the next sweep for the moment something actually becomes due.
 
 - After every sweep, and after any event that changes state (a visit, a logout detected or cleared, a tab created or removed, a settings change), compute `nextDeadline(tabs, state, settings, now)`. This is the earliest time any non-exempt tab reaches a closing threshold:
-  - logged-out tab on a sign-in page: `lastVisitedAt + 30 min` (a logged-out tab on a sign-out page is closed in the same pass that detects it),
-  - landing-page tab: `lastVisitedAt + 10 min`,
+  - other logged-out tab (detected by title or site rule): `lastVisitedAt + 30 min` (a logged-out tab on a sign-out page is closed in the same pass that detects it),
+  - landing-page or sign-in tab: `lastVisitedAt + 10 min`,
   - any tab: `lastVisitedAt + 24 h`.
 - Set a single `chrome.alarms` alarm (`sweep`) for that time, replacing the previous one. Chrome enforces a 30-second minimum delay, so deadlines in the past or less than 30 seconds away are swept immediately instead.
 - When there is no deadline (nothing can become closable), no `sweep` alarm is set.
@@ -228,7 +230,8 @@ if number of tabs <= tabLimit: close nothing, clear the sweep alarm, stop
 for each tab:
   idle = now - lastVisitedAt(tab)
   if exempt(tab): continue
-  if isLandingPage(tab) and idle >= 10 min    -> close(tab, "empty")
+  if (isLandingPage(tab) or isSignInPage(tab)) and idle >= 10 min
+                                              -> close(tab, loggedOutSince(tab) ? "logged-out" : "empty")
   else if loggedOutSince(tab) and (isSignedOutPage(tab) or idle >= 30 min)
                                               -> close(tab, "logged-out")
   else if idle >= 24 h                        -> close(tab, "stale")

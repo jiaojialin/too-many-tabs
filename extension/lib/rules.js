@@ -5,7 +5,7 @@
 // the visited tab is the selected tab of the active window.
 
 import { isLandingPage } from './landing.js';
-import { isSignedOutPage } from './logout.js';
+import { isSignInPage, isSignedOutPage } from './logout.js';
 import { isWebUrl, normalizeUrl } from './url.js';
 
 export const MINUTE = 60 * 1000;
@@ -25,11 +25,12 @@ export function isExempt(tab, entry, ctx) {
   );
 }
 
-// Rule 4 applies to a non-exempt tab that is still on a landing page.
+// Rule 4 applies to a non-exempt tab that is still on a landing page or a
+// sign-in page.
 export function isLandingCandidate(tab, entry, ctx) {
   return (
     tab.status !== 'loading' &&
-    isLandingPage(tab.url ?? '', ctx.settings.landingPages) &&
+    (isLandingPage(tab.url ?? '', ctx.settings.landingPages) || isSignInPage(tab)) &&
     !isExempt(tab, entry, ctx)
   );
 }
@@ -43,8 +44,8 @@ function thresholds(settings) {
 }
 
 // The reason a non-exempt tab is due for closing, or null. A logged-out tab
-// on a sign-out page closes at once; on a sign-in page it waits
-// `loggedOutMinutes` after the last visit.
+// on a sign-out page closes at once; otherwise it waits `loggedOutMinutes`
+// after the last visit (sign-in URLs are caught earlier by Rule 4).
 export function dueReason(tab, entry, ctx) {
   const idle = ctx.now - lastVisitedAt(tab, entry, ctx);
   const limit = thresholds(ctx.settings);
@@ -106,7 +107,7 @@ export function decide(tabs, entries, ctx) {
     const entry = entries[tab.id];
     if (isLandingCandidate(tab, entry, ctx)) {
       if (ctx.now - lastVisitedAt(tab, entry, ctx) >= landingLimit) {
-        closures.push({ tab, reason: 'empty' });
+        closures.push({ tab, reason: entry?.loggedOutSince ? 'logged-out' : 'empty' });
         closing.add(tab.id);
         continue;
       }
