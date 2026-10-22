@@ -240,6 +240,16 @@ test('a real logout to a sign-out page closes the tab once it has loaded', async
   assert.equal(env.history.records[0].reason, 'logged-out');
 });
 
+test('a new tab opened straight onto a sign-out page is not treated as logged out', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: false, url: 'https://help.test/how-to-log-out', title: '', status: 'loading', pinned: false, audible: false, incognito: false });
+  await env.controller.request();
+  Object.assign(env.tab(3), { status: 'complete', title: 'How to log out' });
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, []);
+});
+
 test('a logout from a sign-in page waits 30 minutes after the last visit', async () => {
   const env = setup(baseTabs());
   await env.controller.request();

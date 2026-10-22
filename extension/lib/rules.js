@@ -145,7 +145,10 @@ export function nextDeadline(tabs, entries, ctx) {
     if (isExempt(tab, entry, ctx)) continue;
     const visited = lastVisitedAt(tab, entry, ctx);
     let due = visited + limit.stale;
-    if (entry?.loggedOutSince) due = Math.min(due, visited + limit.loggedOut);
+    if (entry?.loggedOutSince) {
+      const signedOut = tab.status !== 'loading' && isSignedOutPage(tab);
+      due = Math.min(due, signedOut ? ctx.now : visited + limit.loggedOut);
+    }
     consider(due);
   }
   return next;

@@ -9,11 +9,17 @@ const URL_PATTERN =
 
 // The subset that means the user is already signed out (as opposed to a
 // sign-in page): such a tab has nothing left to do and closes right away.
+// Matched against host + path + fragment only, so a search for "session
+// timeout" doesn't count; titles must say the logout already happened.
 const SIGNED_OUT_URL_PATTERN =
   /(?:^|[^a-z])(?:log[-_]?(?:off|out)|sign[-_]?(?:off|out)|timed?[-_]?out|session[-_]?(?:expired|timeout|ended|end))(?:[^a-z]|$)/i;
 
 const SIGNED_OUT_TITLE_PATTERN =
-  /\b(?:sign(?:ed)?[\s-]?(?:out|off)|log(?:ged)?[\s-]?(?:out|off)|session (?:has )?(?:expired|timed out|ended)|session timeout|timed out)\b/i;
+  /\b(?:(?:signed|logged)[\s-]?(?:out|off)|session (?:has )?(?:expired|timed out|ended))\b/i;
+
+// A page offering to sign in again is a sign-in page, even after a timeout.
+const SIGN_IN_URL_PATTERN = /(?:^|[^a-z])(?:log[-_]?(?:on|in)|sign[-_]?(?:on|in))(?:[^a-z]|$)/i;
+const SIGN_IN_TITLE_PATTERN = /\b(?:sign[\s-]?(?:in|on)|log[\s-]?(?:in|on))\b/i;
 
 const TITLE_PATTERN =
   /\b(?:sign(?:ed)?[\s-]?(?:in|on|out|off)|log(?:ged)?[\s-]?(?:in|on|out|off)|session (?:has )?(?:expired|timed out|ended)|session timeout|timed out)\b/i;
@@ -48,12 +54,13 @@ export function isLoginLike({ url, title }, siteRules = []) {
 // Given the previous tracked state of a tab ({url, loginLike, loggedOutSince})
 // and its current {url, title}, returns the next {loginLike, loggedOutSince}.
 // A tab counts as logged out when it moves from a normal page to a
-// login/timeout page on the same site; leaving the login page clears it.
+// login/timeout page on the same site, or from a sign-in page to a sign-out
+// page on the same site; leaving the login page clears it.
 export function nextLogoutState(prev, current, now, siteRules = []) {
   const loginLike = isLoginLike(current, siteRules);
   if (!loginLike) return { loginLike, loggedOutSince: null };
   if (prev?.loggedOutSince) return { loginLike, loggedOutSince: prev.loggedOutSince };
-  if (prev && prev.loginLike === false && sameSite(prev.url, current.url)) {
+  if (prev && (prev.loginLike === false || isSignedOutPage(current)) && sameSite(prev.url, current.url)) {
     return { loginLike, loggedOutSince: now };
   }
   return { loginLike, loggedOutSince: null };
@@ -63,6 +70,11 @@ export function nextLogoutState(prev, current, now, siteRules = []) {
 export function isSignedOutPage({ url, title }) {
   const parsed = webUrl(url ?? '');
   if (!parsed) return false;
-  const target = `${parsed.hostname}${parsed.pathname}${parsed.search}${parsed.hash}`;
-  return SIGNED_OUT_URL_PATTERN.test(target) || SIGNED_OUT_TITLE_PATTERN.test(title ?? '');
+  const signedOut =
+    SIGNED_OUT_URL_PATTERN.test(`${parsed.hostname}${parsed.pathname}${parsed.hash}`) ||
+    SIGNED_OUT_TITLE_PATTERN.test(title ?? '');
+  const signIn =
+    SIGN_IN_URL_PATTERN.test(`${parsed.hostname}${parsed.pathname}${parsed.search}${parsed.hash}`) ||
+    SIGN_IN_TITLE_PATTERN.test(title ?? '');
+  return signedOut && !signIn;
 }

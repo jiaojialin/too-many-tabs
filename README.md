@@ -17,7 +17,7 @@ Requires Chrome 121 or later.
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
 - **Settings page**: the tab limit (12 by default), thresholds (30 min / 24 h / 10 min by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
-- On first install every open tab starts its timers at the install time, so nothing is closed straight away.
+- On first install every open tab starts its timers at the install time, so nothing is closed for being idle straight away. Duplicates and tabs already on a sign-out page (Rule 1) are closed right away.
 
 ## Definitions
 
@@ -67,10 +67,10 @@ Auto-closing only takes effect while **more than 12 tabs** (configurable) are op
 
 Detect tabs whose site has signed the user out (after inactivity, common on banking/finance sites such as Chase and Fidelity, or because the user logged out) and close them:
 
-- **On a sign-out page** (logout, logoff, signed out, session expired/timed out; e.g. `https://www.fidelity.com/customer-service/customer-logout`): close **immediately**, regardless of when the tab was last visited. Once you're logged out, the tab has no further use.
+- **On a sign-out page**: close **immediately**, regardless of when the tab was last visited. Once you're logged out, the tab has no further use. A sign-out page has `logout`, `logoff`, `signout`, `timeout` or `session-expired` in its address (host, path or `#` route; not the query string, so a search for "session timeout" doesn't count), e.g. `https://www.fidelity.com/customer-service/customer-logout`, or a title saying it already happened ("Signed out", "Logged off", "Session expired"). A page that also offers to sign in again (`login`/`signin` in the URL, "Sign in"/"Log on" in the title) is treated as a sign-in page.
 - **On a sign-in page** (login, logon, sign in): close **30 minutes after the tab was last visited** (configurable). The delay protects a sign-in you are in the middle of, e.g. while fetching a 2FA code from another tab.
 - The global exemptions still apply: the tab you are looking at is never closed, so a sign-out page closes as soon as you switch away from it. Rule 0 (tab limit) applies.
-- A tab that is already on a sign-out page when the extension first sees it (e.g. open before the extension was installed) counts as logged out. A sign-in page needs the transition below.
+- A tab counts as logged out after a same-site transition (below), including from a sign-in page to a sign-out page. A tab that is already on a sign-out page when the extension first sees it (e.g. open before the extension was installed) also counts. A sign-out page opened from another site (e.g. an article about logging out, or a cross-domain SSO logout) does not.
 
 Detection signals (no extra host permissions required):
 

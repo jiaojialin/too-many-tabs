@@ -146,6 +146,11 @@ test('nextDeadline returns the earliest closing time of non-exempt tabs', () => 
   assert.equal(nextDeadline(tabs, entries, ctx()), NOW + 20 * MINUTE);
 });
 
+test('nextDeadline: a logged-out tab on a sign-out page is due now', () => {
+  const tabs = [tab(1, { url: 'https://bank.test/logout' })];
+  assert.equal(nextDeadline(tabs, { 1: visitedAgo(0, { loggedOutSince: NOW }) }, ctx()), NOW);
+});
+
 test('nextDeadline is null when nothing can become closable', () => {
   assert.equal(nextDeadline([tab(1, { windowId: ACTIVE_WINDOW })], { 1: visitedAgo(0) }, ctx({ visitedTabId: 1 })), null);
   assert.equal(nextDeadline([], {}, ctx()), null);
