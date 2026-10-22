@@ -31,6 +31,17 @@ Requires Chrome 121 or later.
 
   All other query parameters are significant, e.g. `youtube.com/watch?v=a` vs `?v=b`, `google.com/search?q=cats` vs `?q=dogs`, and different Amazon items are **different** pages.
 
+## Multiple windows
+
+The extension runs once per Chrome profile and covers every tab in every normal window of that profile.
+
+- Only **one** window is the active window (the last-focused one, see Definitions); tabs in all other windows are subject to the closing rules.
+- Duplicates are compared across all windows.
+- A tab only counts as visited when it is the selected tab of the active window; being the front tab of another window does not count.
+- Background audio follows the same rule: a tab keeps playing only if it is the selected tab of the active window (or its site is on the keep-playing list). A video in another window, even one visible on a second monitor, is paused when you work in a different window.
+- The closed-tab history is shared by all windows of the profile.
+- Not covered: other Chrome profiles (each needs its own install), incognito windows, and popup/app windows.
+
 ## Global exemptions (apply to every rule)
 
 The extension never auto-closes:
