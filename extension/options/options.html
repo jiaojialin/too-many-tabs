@@ -30,7 +30,8 @@
     </label>
 
     <h2>Background audio</h2>
-    <label><input type="checkbox" id="audioPauseEnabled"> Pause audio in tabs I switch away from</label>
+    <label><input type="checkbox" id="audioPauseEnabled"> When more than one tab is playing, pause the ones in the background</label>
+    <p class="muted">The tab you are looking at keeps playing; if it is silent, the playing tab you visited most recently does. A single playing tab (e.g. a call you switched away from) is never paused or muted.</p>
     <label>Wait
       <input type="number" id="audioPauseDelaySeconds" min="1" max="25" step="1" required> seconds before pausing
     </label>
