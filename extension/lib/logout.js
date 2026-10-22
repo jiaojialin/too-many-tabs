@@ -7,17 +7,29 @@ import { hostMatches, sameSite } from './url.js';
 const URL_PATTERN =
   /(?:^|[^a-z])(?:log[-_]?(?:on|in|off|out)|sign[-_]?(?:on|in|off|out)|timed?[-_]?out|session[-_]?(?:expired|timeout|ended|end))(?:[^a-z]|$)/i;
 
+// The subset that means the user is already signed out (as opposed to a
+// sign-in page): such a tab has nothing left to do and closes right away.
+const SIGNED_OUT_URL_PATTERN =
+  /(?:^|[^a-z])(?:log[-_]?(?:off|out)|sign[-_]?(?:off|out)|timed?[-_]?out|session[-_]?(?:expired|timeout|ended|end))(?:[^a-z]|$)/i;
+
+const SIGNED_OUT_TITLE_PATTERN =
+  /\b(?:sign(?:ed)?[\s-]?(?:out|off)|log(?:ged)?[\s-]?(?:out|off)|session (?:has )?(?:expired|timed out|ended)|session timeout|timed out)\b/i;
+
 const TITLE_PATTERN =
   /\b(?:sign(?:ed)?[\s-]?(?:in|on|out|off)|log(?:ged)?[\s-]?(?:in|on|out|off)|session (?:has )?(?:expired|timed out|ended)|session timeout|timed out)\b/i;
 
-export function isLoginLikeUrl(raw, siteRules = []) {
-  let url;
+function webUrl(raw) {
   try {
-    url = new URL(raw);
+    const url = new URL(raw);
+    return /^https?:$/.test(url.protocol) ? url : null;
   } catch {
-    return false;
+    return null;
   }
-  if (!/^https?:$/.test(url.protocol)) return false;
+}
+
+export function isLoginLikeUrl(raw, siteRules = []) {
+  const url = webUrl(raw);
+  if (!url) return false;
   const target = `${url.hostname}${url.pathname}${url.search}${url.hash}`;
   if (URL_PATTERN.test(target)) return true;
   return siteRules.some(
@@ -45,4 +57,12 @@ export function nextLogoutState(prev, current, now, siteRules = []) {
     return { loginLike, loggedOutSince: now };
   }
   return { loginLike, loggedOutSince: null };
+}
+
+// A sign-out, logoff or session-timeout page (URL or title), not a sign-in page.
+export function isSignedOutPage({ url, title }) {
+  const parsed = webUrl(url ?? '');
+  if (!parsed) return false;
+  const target = `${parsed.hostname}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  return SIGNED_OUT_URL_PATTERN.test(target) || SIGNED_OUT_TITLE_PATTERN.test(title ?? '');
 }

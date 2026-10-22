@@ -46,6 +46,12 @@ test('decide closes logged-out tabs 30 minutes after the last visit', () => {
   assert.deepEqual(decide(tabs, entries, ctx()).map((c) => [c.tab.id, c.reason]), [[1, 'logged-out']]);
 });
 
+test('decide closes a logged-out tab on a sign-out page at once, unless it is being visited', () => {
+  const tabs = [tab(1, { url: 'https://bank.test/logout' }), tab(2, { url: 'https://bank.test/login', title: 'Sign in' }), tab(3, { url: 'https://bank.test/logout' })];
+  const entries = { 1: visitedAgo(0, { loggedOutSince: NOW }), 2: visitedAgo(0, { loggedOutSince: NOW }), 3: visitedAgo(0, { loggedOutSince: NOW }) };
+  assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 3 })).map((c) => [c.tab.id, c.reason]), [[1, 'logged-out']]);
+});
+
 test('decide closes tabs not visited for 24 hours', () => {
   const tabs = [tab(1), tab(2)];
   const entries = { 1: visitedAgo(24 * HOUR), 2: visitedAgo(23 * HOUR) };

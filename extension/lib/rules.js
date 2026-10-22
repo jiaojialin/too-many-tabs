@@ -5,6 +5,7 @@
 // the visited tab is the selected tab of the active window.
 
 import { isLandingPage } from './landing.js';
+import { isSignedOutPage } from './logout.js';
 import { isWebUrl, normalizeUrl } from './url.js';
 
 export const MINUTE = 60 * 1000;
@@ -41,11 +42,15 @@ function thresholds(settings) {
   };
 }
 
-// The time-based reason a non-exempt tab is due for closing, or null.
+// The reason a non-exempt tab is due for closing, or null. A logged-out tab
+// on a sign-out page closes at once; on a sign-in page it waits
+// `loggedOutMinutes` after the last visit.
 export function dueReason(tab, entry, ctx) {
   const idle = ctx.now - lastVisitedAt(tab, entry, ctx);
   const limit = thresholds(ctx.settings);
-  if (entry?.loggedOutSince && tab.status !== 'loading' && idle >= limit.loggedOut) return 'logged-out';
+  if (entry?.loggedOutSince && tab.status !== 'loading') {
+    if (isSignedOutPage(tab) || idle >= limit.loggedOut) return 'logged-out';
+  }
   if (idle >= limit.stale) return 'stale';
   return null;
 }
