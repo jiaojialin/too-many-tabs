@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from '../extension/lib/audio.js';
+import { audioKeeperId, isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from '../extension/lib/audio.js';
 import { DEFAULT_SETTINGS } from '../extension/lib/settings.js';
 
 const ctx = (settings = {}) => ({ visitedTabId: 1, settings: { ...DEFAULT_SETTINGS, ...settings } });
@@ -58,4 +58,36 @@ test('pause/resume page scripts only resume what they paused', () => {
   } finally {
     delete globalThis.document;
   }
+});
+
+test('audioKeeperId: the visited tab if it plays, else the most recently visited playing tab', () => {
+  const c = { ...ctx(), now: 1000 };
+  const tabs = [playing(1), playing(2), playing(3)];
+  const entries = { 2: { lastVisitedAt: 900 }, 3: { lastVisitedAt: 500 } };
+  assert.equal(audioKeeperId(tabs, entries, c), 1);
+  const quietVisited = [playing(1, { audible: false }), playing(2), playing(3)];
+  assert.equal(audioKeeperId(quietVisited, entries, c), 2);
+  assert.equal(audioKeeperId([playing(1, { audible: false })], entries, c), null);
+});
+
+test('audioKeeperId: user-muted and keep-playing tabs do not compete; tabs we muted do', () => {
+  const c = { ...ctx({ keepPlayingHosts: ['radio.test'] }), now: 1000 };
+  const entries = { 2: { lastVisitedAt: 900 }, 3: { lastVisitedAt: 800 }, 4: { lastVisitedAt: 100, mutedByUs: true } };
+  const tabs = [
+    playing(2, { mutedInfo: { muted: true, reason: 'user' } }),
+    playing(3, { url: 'https://radio.test/' }),
+    playing(4, { mutedInfo: { muted: true, reason: 'extension' } }),
+  ];
+  assert.equal(audioKeeperId(tabs, entries, c), 4);
+});
+
+test('shouldPause: never the keeper, so a lone playing tab keeps playing', () => {
+  assert.ok(!shouldPause(playing(2), {}, { ...ctx(), audioKeeperId: 2 }));
+  assert.ok(shouldPause(playing(3), {}, { ...ctx(), audioKeeperId: 2 }));
+});
+
+test('shouldResume: a tab we muted becomes the keeper; a tab we paused waits for a visit', () => {
+  const c = { ...ctx(), audioKeeperId: 2 };
+  assert.ok(shouldResume(playing(2), { mutedByUs: true }, c));
+  assert.ok(!shouldResume(playing(2, { audible: false }), { pausedByUs: true }, c));
 });

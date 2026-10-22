@@ -2,7 +2,7 @@
 // reconcile(): refresh tracked state, handle background audio, close due tabs,
 // then schedule the next sweep for the next deadline (README "Design").
 
-import { isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
+import { audioKeeperId, isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
 import { recordFromTab } from './db.js';
 import { decide, lastVisitedAt, nextDeadline } from './rules.js';
 import { SETTINGS_KEY, mergeSettings } from './settings.js';
@@ -113,6 +113,7 @@ export function createController({ chrome, history, now = () => Date.now(), time
     state.entries = entries;
 
     const ctx = { now: t, visitedTabId, settings };
+    ctx.audioKeeperId = audioKeeperId(tabs, state.entries, ctx);
     await handleAudio(tabs, state.entries, ctx, ops);
 
     for (const { tab, reason } of decide(tabs, state.entries, ctx)) {
@@ -246,17 +247,21 @@ export function createController({ chrome, history, now = () => Date.now(), time
     }
   }
 
+  // Runs after a pause attempt. If the tab is still audible the pause didn't
+  // silence it: mute it, or, if it may play now, drop the pause flag so it
+  // goes through the pause/mute flow again when competing sound returns.
   async function muteIfStillAudible(tab, entry, ctx) {
+    if (!entry?.pausedByUs || entry.mutedByUs || !tab.audible) return;
     if (
-      entry?.pausedByUs &&
-      !entry.mutedByUs &&
-      tab.audible &&
       !tab.mutedInfo?.muted &&
       tab.id !== ctx.visitedTabId &&
+      tab.id !== ctx.audioKeeperId &&
       ctx.settings.audioPauseEnabled &&
       !isKeepPlaying(tab.url, ctx.settings.keepPlayingHosts)
     ) {
       await mute(tab, entry);
+    } else {
+      entry.pausedByUs = false;
     }
   }
 
