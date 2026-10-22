@@ -254,6 +254,7 @@ export function createController({ chrome, history, now = () => Date.now(), time
       tab.audible &&
       !tab.mutedInfo?.muted &&
       tab.id !== ctx.visitedTabId &&
+      tab.id !== ctx.audioKeeperId &&
       ctx.settings.audioPauseEnabled &&
       !isKeepPlaying(tab.url, ctx.settings.keepPlayingHosts)
     ) {

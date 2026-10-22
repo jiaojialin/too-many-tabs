@@ -558,6 +558,16 @@ test('a second sound source in the background is paused; the call keeps playing'
   assert.deepEqual(env.chrome._state.scripts, [[3, 'pauseMediaInPage']]);
 });
 
+test('the mute fallback is skipped if the tab became the only one playing', async () => {
+  const env = setup(audioTabs('https://video.test/'), { hostAccess: true });
+  await env.controller.request();
+  await env.timers.pending.values().next().value.fn(); // pause fires; mute check scheduled
+  assert.deepEqual(env.chrome._state.scripts, [[2, 'pauseMediaInPage']]);
+  env.tab(1).audible = false; // the other sound stops, tab 2 auto-resumed
+  await env.timers.runAll();
+  assert.deepEqual(env.chrome._state.updates, []);
+});
+
 test('a tab we muted is unmuted when the competing sound stops', async () => {
   const env = setup(audioTabs());
   await env.controller.request();
