@@ -16,7 +16,7 @@ Requires Chrome 121 or later.
 
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
-- **Settings page**: thresholds (30 min / 24 h by default), logged-out site rules, background-audio options and the keep-playing list.
+- **Settings page**: the tab limit (12 by default), thresholds (30 min / 24 h by default), logged-out site rules, background-audio options and the keep-playing list.
 - On first install every open tab starts its timers at the install time, so nothing is closed straight away.
 
 ## Definitions
@@ -52,6 +52,15 @@ The extension never auto-closes:
 - any incognito tab (incognito is ignored entirely).
 
 ## Rules
+
+### Rule 0: Tab limit (applies before every closing rule)
+
+Auto-closing only takes effect while **more than 12 tabs** (configurable) are open in the profile. People can manage 12 tabs themselves.
+
+- Counted: every tab in every normal window of the profile, including pinned tabs and tabs in the active window. Incognito tabs don't count.
+- At or under the limit, nothing is auto-closed and no `sweep` alarm is scheduled; opening another tab triggers a new check.
+- Over the limit, every closing rule applies in full. The limit is an on/off switch, not a floor: with 15 tabs of which 5 are due, all 5 close, even though that leaves 10.
+- Background audio pausing is not affected by the limit (it doesn't close anything).
 
 ### Rule 1: Logged-out tabs
 
@@ -190,6 +199,8 @@ exempt(tab) = tab.pinned
            or (tab.audible and not tab.mutedByUs)
            or tab.windowId == activeWindow
            or tab.incognito
+
+if number of tabs <= tabLimit: close nothing, clear the sweep alarm, stop
 
 for each tab not exempt:
   idle = now - lastVisitedAt(tab)

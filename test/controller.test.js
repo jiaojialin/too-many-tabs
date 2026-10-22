@@ -10,6 +10,8 @@ const silent = { error() {}, warn() {} };
 
 function setup(tabs, options = {}) {
   const chrome = createFakeChrome({ tabs, ...options });
+  // Most tests use a handful of tabs, so the tab limit is lifted unless a test sets it.
+  chrome.storage.sync.data[SETTINGS_KEY] = { tabLimit: 0 };
   const history = createFakeHistory();
   const timers = createFakeTimers();
   let now = options.now ?? 1_000_000_000_000;
@@ -292,7 +294,7 @@ test('re-attaches state after a browser restart', async () => {
 
 test('settings thresholds are applied', async () => {
   const env = setup(baseTabs());
-  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { staleHours: 1 } });
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { tabLimit: 0, staleHours: 1 } });
   await env.controller.request();
   env.advance(HOUR);
   await env.controller.request();
@@ -381,7 +383,7 @@ test('keep-playing sites are never paused', async () => {
     { id: 2, windowId: 1, index: 1, active: false, url: 'https://music.youtube.com/', audible: true },
   ];
   const env = setup(tabs, { hostAccess: true });
-  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { keepPlayingHosts: ['youtube.com'] } });
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { tabLimit: 0, keepPlayingHosts: ['youtube.com'] } });
   await env.controller.request();
   assert.equal(env.timers.pending.size, 0);
 });
@@ -432,7 +434,7 @@ test('adding a paused tab to the keep-playing list resumes it in the background'
   const env = setup(audioTabs('https://video.test/'), { hostAccess: true });
   await env.controller.request();
   await env.timers.runAll();
-  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { keepPlayingHosts: ['video.test'] } });
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { tabLimit: 0, keepPlayingHosts: ['video.test'] } });
   await env.controller.request();
   assert.deepEqual(env.chrome._state.scripts.at(-1), [2, 'resumeMediaInPage']);
   assert.equal(env.timers.pending.size, 0, 'the pending mute check was cancelled');
@@ -442,7 +444,7 @@ test('turning audio pausing off unmutes tabs the extension muted', async () => {
   const env = setup(audioTabs());
   await env.controller.request();
   await env.timers.runAll();
-  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { audioPauseEnabled: false } });
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { tabLimit: 0, audioPauseEnabled: false } });
   await env.controller.request();
   assert.deepEqual(env.chrome._state.updates.at(-1), [2, { muted: false }]);
 });
@@ -459,4 +461,36 @@ test('returning to a paused tab cancels its pending mute check', async () => {
   env.tab(2).active = true;
   await env.controller.request(); // resumed
   assert.equal([...env.timers.pending.values()].filter((t) => t.ms === 4000).length, 0);
+});
+
+const filler = (count, windowId = 1) =>
+  Array.from({ length: count }, (_, i) => ({ id: 100 + i, windowId, index: i + 1, url: `https://filler${i}.test/` }));
+
+test('tab limit: with 12 tabs nothing closes and no sweep alarm is set; a 13th tab turns it on', async () => {
+  const env = setup([...baseTabs(), ...filler(10)]);
+  delete env.chrome.storage.sync.data[SETTINGS_KEY]; // default limit of 12
+  await env.controller.request();
+  env.advance(48 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, []);
+  assert.equal(env.chrome._state.alarms.has(SWEEP_ALARM), false);
+  env.chrome._state.tabs.push({ id: 200, windowId: 1, index: 20, url: 'https://new.test/', active: false, pinned: false, audible: false, incognito: false });
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [2], 'the long-unvisited tab in the other window closes');
+});
+
+test('tab limit does not count incognito tabs and does not affect audio pausing', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'https://video.test/', audible: true },
+    ...Array.from({ length: 11 }, (_, i) => ({ id: 300 + i, windowId: 9, index: i, url: `https://i${i}.test/`, incognito: true })),
+  ];
+  const env = setup(tabs);
+  delete env.chrome.storage.sync.data[SETTINGS_KEY];
+  await env.controller.request();
+  env.advance(48 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [], 'only 2 non-incognito tabs');
+  await env.timers.runAll();
+  assert.deepEqual(env.chrome._state.updates, [[2, { muted: true }]], 'audio is still paused/muted');
 });
