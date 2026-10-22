@@ -17,6 +17,10 @@ export function newEntry(tab, now, siteRules = []) {
     windowId: tab.windowId,
     index: tab.index,
     lastVisitedAt: now,
+    // When the tab was opened (or first seen) and last switched to; the
+    // freshest copy of a duplicate group survives.
+    openedAt: now,
+    enteredAt: null,
     loginLike: nextLogoutState(undefined, tab, now, siteRules).loginLike,
     // A tab already sitting on a sign-out page when first seen (e.g. open
     // before the extension was installed) has no transition to detect.

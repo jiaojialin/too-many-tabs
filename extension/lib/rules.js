@@ -58,14 +58,20 @@ export function dueReason(tab, entry, ctx) {
 
 // Tabs still loading are left out until they finish (README: "run the
 // duplicate check when loading completes").
-// Of a group of duplicate tabs, the one to keep: the tab being visited, else
-// the most recently visited; ties go to the newest tab (highest id).
+// When a copy was last opened or switched to. Entries stored before these
+// fields existed fall back to the last-visited time.
+function freshness(tab, entry, ctx) {
+  const latest = Math.max(entry?.openedAt ?? 0, entry?.enteredAt ?? 0);
+  return latest || lastVisitedAt(tab, entry, ctx);
+}
+
+// Of a group of duplicate tabs, the one to keep: the copy most recently opened
+// or switched to, so opening a page again closes the older copies. Ties go to
+// the tab being visited, then the newest tab (highest id). The tab being
+// visited is exempt anyway, so if a newer copy opens in the background both
+// stay until you leave it.
 export function pickDuplicateWinner(group, entries, ctx) {
-  const score = (tab) => [
-    tab.id === ctx.visitedTabId ? 1 : 0,
-    lastVisitedAt(tab, entries[tab.id], ctx),
-    tab.id,
-  ];
+  const score = (tab) => [freshness(tab, entries[tab.id], ctx), tab.id === ctx.visitedTabId ? 1 : 0, tab.id];
   return group.reduce((best, tab) => {
     const a = score(tab);
     const b = score(best);
@@ -88,18 +94,11 @@ export function groupDuplicates(tabs) {
   return [...groups.values()].filter((g) => g.length > 1);
 }
 
-// Auto-closing only applies while more than `tabLimit` tabs are open
-// (README Rule 0). `tabs` are the profile's non-incognito tabs.
-export function overTabLimit(tabs, settings) {
-  return tabs.length > settings.tabLimit;
-}
-
 // Returns [{ tab, reason }] for every tab that should be closed now.
 // Time-based rules run first; duplicates are then resolved among the tabs
 // that remain, so a copy is never closed as a duplicate of a tab that is
 // itself being closed.
 export function decide(tabs, entries, ctx) {
-  if (!overTabLimit(tabs, ctx.settings)) return [];
   const closures = [];
   const closing = new Set();
   const landingLimit = thresholds(ctx.settings).landing;
@@ -132,9 +131,7 @@ export function decide(tabs, entries, ctx) {
 }
 
 // Earliest time any non-exempt tab reaches a closing threshold, or null.
-// Null at or under the tab limit: opening another tab triggers a new pass.
 export function nextDeadline(tabs, entries, ctx) {
-  if (!overTabLimit(tabs, ctx.settings)) return null;
   const limit = thresholds(ctx.settings);
   let next = null;
   const consider = (due) => {

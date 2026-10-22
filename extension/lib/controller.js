@@ -91,7 +91,8 @@ export function createController({ chrome, history, now = () => Date.now(), time
 
     const visited = tabs.find((tab) => tab.active && tab.windowId === state.activeWindowId);
     const visitedTabId = visited?.id ?? null;
-    if (state.visitedTabId !== visitedTabId) {
+    const entered = state.visitedTabId !== visitedTabId;
+    if (entered) {
       const left = state.entries[state.visitedTabId];
       if (left) left.lastVisitedAt = t;
       state.visitedTabId = visitedTabId;
@@ -103,7 +104,10 @@ export function createController({ chrome, history, now = () => Date.now(), time
       const entry = old ? refreshEntry(old, tab, t, settings.siteRules) : newEntry(tab, t, settings.siteRules);
       entries[tab.id] = syncAudioFlags(entry, tab, chrome.runtime.id);
     }
-    if (visited) entries[visited.id].lastVisitedAt = t;
+    if (visited) {
+      entries[visited.id].lastVisitedAt = t;
+      if (entered) entries[visited.id].enteredAt = t;
+    }
     state.entries = entries;
 
     const ctx = { now: t, visitedTabId, settings };

@@ -16,7 +16,7 @@ Requires Chrome 121 or later.
 
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
-- **Settings page**: the tab limit (12 by default), thresholds (30 min / 24 h / 10 min by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
+- **Settings page**: thresholds (30 min / 24 h / 10 min by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
 - On first install every open tab starts its timers at the install time, so nothing is closed for being idle straight away. Duplicates and tabs already on a sign-out page (Rule 1) are closed right away.
 
 ## Definitions
@@ -54,15 +54,6 @@ The extension never auto-closes:
 
 ## Rules
 
-### Rule 0: Tab limit (applies before every closing rule)
-
-Auto-closing only takes effect while **more than 12 tabs** (configurable) are open in the profile. People can manage 12 tabs themselves.
-
-- Counted: every tab in every normal window of the profile, including pinned tabs and the active tab. Incognito tabs don't count.
-- At or under the limit, nothing is auto-closed and no `sweep` alarm is scheduled; opening another tab triggers a new check.
-- Over the limit, every closing rule applies in full. The limit is an on/off switch, not a floor: with 15 tabs of which 5 are due, all 5 close, even though that leaves 10.
-- Background audio pausing is not affected by the limit (it doesn't close anything).
-
 ### Rule 1: Logged-out tabs
 
 Detect tabs whose site has signed the user out (after inactivity, common on banking/finance sites such as Chase and Fidelity, or because the user logged out) and close them:
@@ -70,7 +61,7 @@ Detect tabs whose site has signed the user out (after inactivity, common on bank
 - **On a sign-out page**: close **immediately**, regardless of when the tab was last visited. Once you're logged out, the tab has no further use. A sign-out page has `logout`, `logoff`, `signout`, `timeout` or `session-expired` in its address (host, path or `#` route; not the query string, so a search for "session timeout" doesn't count), e.g. `https://www.fidelity.com/customer-service/customer-logout`, or a title saying it already happened ("Signed out", "Logged off", "Session expired"). A page that also offers to sign in again (`login`/`signin` in the URL, "Sign in"/"Log on" in the title) is treated as a sign-in page.
 - **On a sign-in page** (`login`, `logon`, `signin` in the address): closed by Rule 4 like a landing page, **10 minutes after the tab was last visited**, logged out or not. History reason `logged-out` if a logout was detected, otherwise `empty`.
 - **Otherwise** (a logout detected only from the title or a site rule): close **30 minutes after the tab was last visited** (configurable).
-- The global exemptions still apply: the tab you are looking at is never closed, so a sign-out page closes as soon as you switch away from it. Rule 0 (tab limit) applies.
+- The global exemptions still apply: the tab you are looking at is never closed, so a sign-out page closes as soon as you switch away from it.
 - A tab counts as logged out after a same-site transition (below), including from a sign-in page to a sign-out page. A tab that is already on a sign-out page when the extension first sees it (e.g. open before the extension was installed) also counts. A sign-out page opened from another site (e.g. an article about logging out, or a cross-domain SSO logout) does not.
 
 Detection signals (no extra host permissions required):
@@ -88,9 +79,11 @@ Behavior:
 
 ### Rule 2: Duplicate tabs
 
-Tabs whose **normalized URLs** are equal are duplicates. Keep only the **most recently visited** one and close the others.
+Tabs whose **normalized URLs** are equal are duplicates. Keep only the **freshest** copy, the one most recently opened or switched to, and close the others.
 
-- The active tab counts as the most recently visited (it is being visited), so it always survives.
+- **Event-driven, not timed**: the check runs as soon as a tab finishes loading (`tabs.onUpdated` with `status: complete`), and on tab switches, focus changes, tab creation and removal. Opening a page that is already open closes the older copies within about a second; the 10-minute backstop alarm is only a safety net. A tab still loading is left out until it settles, so redirects don't cause false matches.
+- **Opening a page again wins**: a newly opened copy is fresher than any existing copy, so the old ones close, even if you visited them recently. Switching to an old copy makes it the freshest, and then the others close.
+- The tab you are looking at is never closed (global exemption). If a newer copy opens in the background (e.g. Cmd-click), both stay until you switch away; then the copy you were looking at, now the older one, closes.
 - Duplicates are closed in any window, including the active window: two copies side by side in the window you are using are reduced to one.
 - Pinned/audible duplicates are never closed.
 
@@ -113,7 +106,7 @@ Close tabs that are still on an empty, landing or sign-in page **10 minutes afte
 - **Sign-in pages** are treated as landing pages: any page with `login`, `logon`, `signin` or `sign-on` in its host, path or `#` route, e.g. `https://digital.fidelity.com/prgw/digital/signin/retail?AuthRedUrl=...`. The query string and title don't count, so a search for "login" or an article titled "How to sign in" is not a sign-in page. If you leave a sign-in half done in a background tab (e.g. while fetching a 2FA code), it is closed after 10 minutes.
 - A site's general home page (e.g. `nytimes.com/`) is **not** a landing page by default; add it to the list if wanted.
 - **"Did nothing"** means the tab is still on the landing page: it matches only the page itself, not search results (any `q`, `p`, `wd`, `query` or `text` parameter, or a `#q=` fragment, means a search was made). The extension can't see text typed into a search box but not submitted.
-- The global exemptions apply: the active tab, pinned, audible and incognito tabs are kept, and Rule 0 (tab limit) applies.
+- The global exemptions apply: the active tab, pinned, audible and incognito tabs are kept.
 - Tabs still loading are never closed by this rule.
 - History reason: `empty` (shown as **Unused**), or `logged-out` for a sign-in page reached by a detected logout.
 
@@ -209,7 +202,9 @@ Instead of polling on a fixed interval, the extension schedules the next sweep f
 
 Stored in `chrome.storage.local` so it survives service-worker restarts and browser restarts:
 
-`tabId → { url, normalizedUrl, lastVisitedAt, loggedOutSince, pausedByUs, mutedByUs, windowId, index }`
+`tabId → { url, normalizedUrl, lastVisitedAt, openedAt, enteredAt, loggedOutSince, pausedByUs, mutedByUs, windowId, index }`
+
+`openedAt` is when the tab was opened (or first seen), `enteredAt` when it was last switched to; they decide which duplicate survives.
 
 ### Sweep algorithm
 
@@ -225,8 +220,6 @@ exempt(tab) = tab.pinned
            or tab == activeTab
            or tab.incognito
 
-if number of tabs <= tabLimit: close nothing, clear the sweep alarm, stop
-
 for each tab:
   idle = now - lastVisitedAt(tab)
   if exempt(tab): continue
@@ -237,8 +230,8 @@ for each tab:
   else if idle >= 24 h                        -> close(tab, "stale")
 
 for each group of tabs sharing a normalizedUrl (size > 1):
-  winner = the active tab if it is in the group,
-           otherwise the tab with the latest lastVisitedAt
+  winner = the tab with the latest max(openedAt, enteredAt)
+           (ties: the active tab, then the newest tab id)
   for each other tab in the group, if not exempt -> close(tab, "duplicate")
 ```
 
