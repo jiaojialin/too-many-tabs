@@ -14,6 +14,8 @@ export const DEFAULT_SITE_RULES = [
 export const MAX_AUDIO_PAUSE_DELAY_SECONDS = 25;
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  // Auto-closing only runs while more than this many tabs are open.
+  tabLimit: 12,
   loggedOutMinutes: 30,
   staleHours: 24,
   audioPauseEnabled: true,
@@ -21,6 +23,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   keepPlayingHosts: [],
   siteRules: DEFAULT_SITE_RULES,
 });
+
+function wholeNumber(value, fallback) {
+  return Number.isInteger(value) && value >= 0 ? value : fallback;
+}
 
 function positiveNumber(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
@@ -30,6 +36,7 @@ function positiveNumber(value, fallback) {
 export function mergeSettings(stored = {}) {
   const s = stored ?? {};
   return {
+    tabLimit: wholeNumber(s.tabLimit, DEFAULT_SETTINGS.tabLimit),
     loggedOutMinutes: positiveNumber(s.loggedOutMinutes, DEFAULT_SETTINGS.loggedOutMinutes),
     staleHours: positiveNumber(s.staleHours, DEFAULT_SETTINGS.staleHours),
     audioPauseEnabled:

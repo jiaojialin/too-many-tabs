@@ -9,9 +9,12 @@
 </head>
 <body>
   <h1>Too Many Tabs settings</h1>
-  <p class="muted">Pinned tabs, tabs playing sound, tabs in the active window and incognito tabs are never closed.</p>
+  <p class="muted">Nothing is auto-closed unless more tabs than the limit below are open (12 by default). Pinned tabs, tabs playing sound, tabs in the active window and incognito tabs are never closed.</p>
   <form id="form">
     <h2>Closing rules</h2>
+    <label>Only auto-close when more than
+      <input type="number" id="tabLimit" min="0" step="1" required> tabs are open
+    </label>
     <label>Close logged-out tabs
       <input type="number" id="loggedOutMinutes" min="1" step="1" required> minutes after last visit
     </label>

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HOUR, MINUTE, decide, isExempt, lastVisitedAt, nextDeadline, pickDuplicateWinner } from '../extension/lib/rules.js';
+import { HOUR, MINUTE, decide, isExempt, lastVisitedAt, nextDeadline, overTabLimit, pickDuplicateWinner } from '../extension/lib/rules.js';
 import { DEFAULT_SETTINGS } from '../extension/lib/settings.js';
 
 const NOW = 1_000_000_000_000;
 const ACTIVE_WINDOW = 1;
 const OTHER_WINDOW = 2;
-const ctx = (overrides = {}) => ({ now: NOW, activeWindowId: ACTIVE_WINDOW, visitedTabId: null, settings: DEFAULT_SETTINGS, ...overrides });
+// Most tests use a handful of tabs, so the tab limit is lifted unless a test sets it.
+const SETTINGS = { ...DEFAULT_SETTINGS, tabLimit: 0 };
+const ctx = (overrides = {}) => ({ now: NOW, activeWindowId: ACTIVE_WINDOW, visitedTabId: null, settings: SETTINGS, ...overrides });
 const tab = (id, props = {}) => ({ id, windowId: OTHER_WINDOW, url: `https://site${id}.test/`, ...props });
 const visitedAgo = (ms, extra = {}) => ({ lastVisitedAt: NOW - ms, loggedOutSince: null, ...extra });
 
@@ -44,7 +46,7 @@ test('decide closes tabs not visited for 24 hours', () => {
 });
 
 test('decide honours configured thresholds', () => {
-  const settings = { ...DEFAULT_SETTINGS, staleHours: 1, loggedOutMinutes: 5 };
+  const settings = { ...SETTINGS, staleHours: 1, loggedOutMinutes: 5 };
   const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(5 * MINUTE, { loggedOutSince: NOW - MINUTE }) };
   assert.deepEqual(
     decide([tab(1), tab(2)], entries, ctx({ settings })).map((c) => c.reason),
@@ -127,4 +129,36 @@ test('nextDeadline returns the earliest closing time of non-exempt tabs', () => 
 test('nextDeadline is null when nothing can become closable', () => {
   assert.equal(nextDeadline([tab(1, { windowId: ACTIVE_WINDOW })], { 1: visitedAgo(0) }, ctx()), null);
   assert.equal(nextDeadline([], {}, ctx()), null);
+});
+
+const manyTabs = (count) => Array.from({ length: count }, (_, i) => tab(i + 1));
+const allStale = (tabs) => Object.fromEntries(tabs.map((t) => [t.id, visitedAgo(48 * HOUR)]));
+
+test('tab limit: nothing is closed with 12 tabs or fewer (default limit)', () => {
+  const tabs = manyTabs(12);
+  const limited = ctx({ settings: DEFAULT_SETTINGS });
+  assert.equal(DEFAULT_SETTINGS.tabLimit, 12);
+  assert.ok(!overTabLimit(tabs, DEFAULT_SETTINGS));
+  assert.deepEqual(decide(tabs, allStale(tabs), limited), []);
+  assert.equal(nextDeadline(tabs, allStale(tabs), limited), null);
+});
+
+test('tab limit: over the limit every due tab closes, even below the limit afterwards', () => {
+  const tabs = manyTabs(15);
+  const entries = Object.fromEntries(tabs.map((t) => [t.id, visitedAgo(t.id <= 5 ? 48 * HOUR : MINUTE)]));
+  const result = decide(tabs, entries, ctx({ settings: DEFAULT_SETTINGS }));
+  assert.deepEqual(result.map((c) => c.tab.id), [1, 2, 3, 4, 5], 'an on/off switch, not a floor');
+  assert.notEqual(nextDeadline(tabs, entries, ctx({ settings: DEFAULT_SETTINGS })), null);
+});
+
+test('tab limit counts pinned and active-window tabs, and applies to duplicates', () => {
+  const url = 'https://a.test/page';
+  const tabs = [
+    ...Array.from({ length: 11 }, (_, i) => tab(i + 10, { pinned: true, windowId: ACTIVE_WINDOW })),
+    tab(1, { url }),
+    tab(2, { url }),
+  ];
+  const entries = { 1: visitedAgo(HOUR), 2: visitedAgo(MINUTE) };
+  assert.deepEqual(decide(tabs, entries, ctx({ settings: DEFAULT_SETTINGS })).map((c) => c.tab.id), [1]);
+  assert.deepEqual(decide(tabs.slice(1), entries, ctx({ settings: DEFAULT_SETTINGS })), [], '12 tabs: no duplicate closing');
 });
