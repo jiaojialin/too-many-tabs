@@ -30,6 +30,11 @@ export function narrowRange(range, from, to) {
   };
 }
 
+// Whether a { from, to } filter range cuts off part of the local `day`.
+export function isDayClipped(range, day) {
+  return (range.from != null && range.from > day) || (range.to != null && range.to < endOfDay(day));
+}
+
 // The line under a day's heading: "12 tabs closed so far today" for today,
 // "34 tabs closed yesterday" / "... on Mon, Oct 19, 2026" for past days.
 // `filtered` says the count only includes records matching the filters.
@@ -52,22 +57,6 @@ export function dayLabel(ts, now, locale) {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-// Groups records (already sorted) into [{ key, label, records }] by local day,
-// keeping their order.
-export function groupByDay(records, now, locale) {
-  const groups = [];
-  for (const record of records) {
-    const key = startOfDay(record.closedAt);
-    let group = groups[groups.length - 1];
-    if (!group || group.key !== key) {
-      group = { key, label: dayLabel(record.closedAt, now, locale), records: [] };
-      groups.push(group);
-    }
-    group.records.push(record);
-  }
-  return groups;
 }
 
 export const PRESETS = ['hour', 'today', '7d', '30d', 'all'];

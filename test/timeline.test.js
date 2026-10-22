@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dayCountText, dayLabel, endOfDay, formatClock, groupByDay, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
+import { dayCountText, dayLabel, endOfDay, formatClock, isDayClipped, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
 
 const at = (y, m, d, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 const NOW = at(2026, 10, 21, 15, 0);
@@ -9,19 +9,6 @@ test('dayLabel: Today, Yesterday, then a full date', () => {
   assert.equal(dayLabel(at(2026, 10, 21, 0, 5), NOW, 'en-US'), 'Today');
   assert.equal(dayLabel(at(2026, 10, 20, 23, 59), NOW, 'en-US'), 'Yesterday');
   assert.equal(dayLabel(at(2026, 10, 19), NOW, 'en-US'), 'Mon, Oct 19, 2026');
-});
-
-test('groupByDay keeps order and groups consecutive days', () => {
-  const records = [
-    { id: 3, closedAt: at(2026, 10, 21, 14) },
-    { id: 2, closedAt: at(2026, 10, 21, 9) },
-    { id: 1, closedAt: at(2026, 10, 19, 8) },
-  ];
-  const groups = groupByDay(records, NOW, 'en-US');
-  assert.deepEqual(groups.map((g) => [g.label, g.records.map((r) => r.id)]), [
-    ['Today', [3, 2]],
-    ['Mon, Oct 19, 2026', [1]],
-  ]);
 });
 
 test('rangeForPreset', () => {
@@ -60,4 +47,12 @@ test('dayCountText: so far today, closed on past days', () => {
   assert.equal(dayCountText(1, at(2026, 10, 20, 0), NOW, { locale: 'en-US' }), '1 tab closed yesterday');
   assert.equal(dayCountText(34, at(2026, 10, 19, 0), NOW, { locale: 'en-US' }), '34 tabs closed on Mon, Oct 19, 2026');
   assert.equal(dayCountText(3, at(2026, 10, 21, 0), NOW, { filtered: true, locale: 'en-US' }), '3 matching tabs closed so far today');
+});
+
+test('isDayClipped: a range that cuts off part of the day', () => {
+  const day = at(2026, 10, 21, 0);
+  assert.equal(isDayClipped({ from: null, to: null }, day), false);
+  assert.equal(isDayClipped({ from: day - 1, to: null }, day), false);
+  assert.equal(isDayClipped({ from: day + 1, to: null }, day), true);
+  assert.equal(isDayClipped({ from: null, to: endOfDay(day) - 1 }, day), true);
 });
