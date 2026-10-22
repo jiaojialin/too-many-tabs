@@ -44,8 +44,8 @@ function thresholds(settings) {
 }
 
 // The reason a non-exempt tab is due for closing, or null. A logged-out tab
-// on a sign-out page closes at once; on a sign-in page it waits
-// `loggedOutMinutes` after the last visit.
+// on a sign-out page closes at once; otherwise it waits `loggedOutMinutes`
+// after the last visit (sign-in URLs are caught earlier by Rule 4).
 export function dueReason(tab, entry, ctx) {
   const idle = ctx.now - lastVisitedAt(tab, entry, ctx);
   const limit = thresholds(ctx.settings);

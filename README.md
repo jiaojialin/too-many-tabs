@@ -197,7 +197,7 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 Instead of polling on a fixed interval, the extension schedules the next sweep for the moment something actually becomes due.
 
 - After every sweep, and after any event that changes state (a visit, a logout detected or cleared, a tab created or removed, a settings change), compute `nextDeadline(tabs, state, settings, now)`. This is the earliest time any non-exempt tab reaches a closing threshold:
-  - logged-out tab on a sign-in page: `lastVisitedAt + 30 min` (a logged-out tab on a sign-out page is closed in the same pass that detects it),
+  - other logged-out tab (detected by title or site rule): `lastVisitedAt + 30 min` (a logged-out tab on a sign-out page is closed in the same pass that detects it),
   - landing-page or sign-in tab: `lastVisitedAt + 10 min`,
   - any tab: `lastVisitedAt + 24 h`.
 - Set a single `chrome.alarms` alarm (`sweep`) for that time, replacing the previous one. Chrome enforces a 30-second minimum delay, so deadlines in the past or less than 30 seconds away are swept immediately instead.
