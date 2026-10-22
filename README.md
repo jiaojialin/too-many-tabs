@@ -224,7 +224,7 @@ for each tab:
   idle = now - lastVisitedAt(tab)
   if exempt(tab): continue
   if isLandingPage(tab) and idle >= 10 min    -> close(tab, "empty")
-  if loggedOutSince(tab) and idle >= 30 min  -> close(tab, "logged-out")
+  else if loggedOutSince(tab) and idle >= 30 min -> close(tab, "logged-out")
   else if idle >= 24 h                        -> close(tab, "stale")
 
 for each group of tabs sharing a normalizedUrl (size > 1):

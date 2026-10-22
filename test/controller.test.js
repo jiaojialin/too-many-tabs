@@ -119,7 +119,7 @@ test('Chrome losing focus keeps the last-focused window as the active window', a
   await env.controller.onFocusChanged(-1);
   env.advance(25 * HOUR);
   await env.controller.request();
-  assert.deepEqual(env.chrome._state.removed, [2], 'window 1 stays protected');
+  assert.deepEqual(env.chrome._state.removed, [2], 'the selected tab of window 1 stays protected');
 });
 
 test('closes older duplicates and keeps the copy in the active window', async () => {
@@ -166,21 +166,23 @@ test('with an incognito window focused at startup, a normal window is still prot
   await env.controller.request();
   env.advance(25 * HOUR);
   await env.controller.request();
-  assert.equal(env.chrome._state.removed.length, 1, 'one window stays protected');
+  assert.equal(env.chrome._state.removed.length, 1, 'the selected tab of one window stays protected');
 });
 
 test('the active window is read fresh on every pass, so a focus change never lags', async () => {
   const tabs = [
-    { id: 1, windowId: 1, index: 0, active: true, url: 'https://a.test/page', title: 'A' },
+    { id: 5, windowId: 1, index: 0, active: true, url: 'https://a.test/page', title: 'A' },
     { id: 2, windowId: 2, index: 0, active: true, url: 'https://b.test/', title: 'B' },
   ];
   const env = setup(tabs);
   await env.controller.request();
-  // The user focuses window 2 and opens a duplicate of tab 1 there.
+  // The user focuses window 2 and opens a duplicate of tab 5 there. The new
+  // tab has the lower id, so it can only win by being the visited tab.
   env.focus(2);
-  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: false, url: 'https://a.test/page', pinned: false, audible: false, incognito: false });
+  env.tab(2).active = false;
+  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: true, url: 'https://a.test/page', pinned: false, audible: false, incognito: false });
   await env.controller.request();
-  assert.deepEqual(env.chrome._state.removed, [1], 'the copy in the newly focused window wins');
+  assert.deepEqual(env.chrome._state.removed, [5], 'the visited copy in the newly focused window wins');
 });
 
 test('onFocusChanged ignores Chrome losing focus', () => {
