@@ -47,9 +47,16 @@
     </div>
   </header>
   <main>
+    <nav id="day-nav" hidden>
+      <button type="button" id="newer">‹ Newer</button>
+      <div class="day-heading">
+        <h2 id="day-label"></h2>
+        <p id="day-count" class="muted"></p>
+      </div>
+      <button type="button" id="older">Older ›</button>
+    </nav>
     <div id="timeline"></div>
     <p id="empty" class="muted" hidden>No closed tabs match these filters.</p>
-    <div id="sentinel"></div>
   </main>
   <script type="module" src="history.js"></script>
 </body>

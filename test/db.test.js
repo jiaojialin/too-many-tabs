@@ -96,3 +96,56 @@ test('recordFromTab captures the spec fields', () => {
     index: 7,
   });
 });
+
+const DAY_MS = 86_400_000;
+const localDay = (y, m, d, h = 12) => new Date(y, m - 1, d, h).getTime();
+
+async function seedDays() {
+  await history.add(record(localDay(2026, 10, 21, 9), { title: 'a', reason: 'stale' }));
+  await history.add(record(localDay(2026, 10, 21, 15), { title: 'b', reason: 'duplicate' }));
+  await history.add(record(localDay(2026, 10, 18, 10), { title: 'c', reason: 'stale' }));
+  await history.add(record(localDay(2026, 10, 12, 10), { title: 'd', reason: 'duplicate' }));
+}
+
+test('nearestDay: latest, older and newer days with records, skipping empty days', async () => {
+  await seedDays();
+  const d21 = localDay(2026, 10, 21, 0), d18 = localDay(2026, 10, 18, 0), d12 = localDay(2026, 10, 12, 0);
+  assert.equal(await history.nearestDay(null, 'latest'), d21);
+  assert.equal(await history.nearestDay(d21, 'older'), d18);
+  assert.equal(await history.nearestDay(d18, 'older'), d12);
+  assert.equal(await history.nearestDay(d12, 'older'), null);
+  assert.equal(await history.nearestDay(d12, 'newer'), d18);
+  assert.equal(await history.nearestDay(d21, 'newer'), null);
+  assert.equal(await history.nearestDay(d21, 'older', { reason: 'duplicate' }), d12, 'filters apply');
+  assert.equal(await history.nearestDay(null, 'latest', { to: d18 + DAY_MS - 1 }), d18, 'date range applies');
+});
+
+test('dayPage: a day with its records and neighbours, in the requested order', async () => {
+  await seedDays();
+  const d21 = localDay(2026, 10, 21, 0), d18 = localDay(2026, 10, 18, 0);
+  const latest = await history.dayPage(null);
+  assert.equal(latest.day, d21);
+  assert.deepEqual(latest.records.map((r) => r.title), ['b', 'a']);
+  assert.equal(latest.newer, null);
+  assert.equal(latest.older, d18);
+  assert.deepEqual((await history.dayPage(d21, { order: 'asc' })).records.map((r) => r.title), ['a', 'b']);
+  const middle = await history.dayPage(d18);
+  assert.deepEqual([middle.newer, middle.older], [d21, localDay(2026, 10, 12, 0)]);
+});
+
+test('dayPage: a partial-day range only loads that part', async () => {
+  await seedDays();
+  const page = await history.dayPage(null, { from: localDay(2026, 10, 21, 12) });
+  assert.deepEqual(page.records.map((r) => r.title), ['b']);
+  assert.equal(page.older, null);
+});
+
+test('dayPage: an emptied day falls back to the next older day, then newer; empty history gives null', async () => {
+  assert.deepEqual(await history.dayPage(null), { day: null, records: [], newer: null, older: null });
+  await seedDays();
+  const d21 = localDay(2026, 10, 21, 0), d18 = localDay(2026, 10, 18, 0), d12 = localDay(2026, 10, 12, 0);
+  assert.equal((await history.dayPage(localDay(2026, 10, 20, 0))).day, d18, 'older first');
+  assert.equal((await history.dayPage(d21, { reason: 'stale', text: 'c' })).day, d18);
+  assert.equal((await history.dayPage(localDay(2026, 10, 1, 0))).day, d12, 'then newer');
+  assert.equal((await history.dayPage(d21, { text: 'zzz' })).day, null);
+});

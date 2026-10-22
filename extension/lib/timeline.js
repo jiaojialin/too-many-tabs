@@ -15,6 +15,37 @@ export function startOfDay(ts) {
   return d.getTime();
 }
 
+// Last millisecond of the local day containing `ts`. Adding 36 hours always
+// lands in the next day, even across a daylight-saving change.
+export function endOfDay(ts) {
+  return startOfDay(startOfDay(ts) + 36 * 60 * 60 * 1000) - 1;
+}
+
+// Intersects a { from, to } filter range (either end may be null) with
+// [from, to].
+export function narrowRange(range, from, to) {
+  return {
+    from: range.from === null || range.from === undefined ? from : Math.max(range.from, from),
+    to: range.to === null || range.to === undefined ? to : Math.min(range.to, to),
+  };
+}
+
+// Whether a { from, to } filter range cuts off part of the local `day`.
+export function isDayClipped(range, day) {
+  return (range.from != null && range.from > day) || (range.to != null && range.to < endOfDay(day));
+}
+
+// The line under a day's heading: "12 tabs closed so far today" for today,
+// "34 tabs closed yesterday" / "... on Mon, Oct 19, 2026" for past days.
+// `filtered` says the count only includes records matching the filters.
+export function dayCountText(count, day, now, { filtered = false, locale } = {}) {
+  const tabs = `${count} ${filtered ? 'matching ' : ''}${count === 1 ? 'tab' : 'tabs'}`;
+  const label = dayLabel(day, now, locale);
+  if (label === 'Today') return `${tabs} closed so far today`;
+  if (label === 'Yesterday') return `${tabs} closed yesterday`;
+  return `${tabs} closed on ${label}`;
+}
+
 export function dayLabel(ts, now, locale) {
   const day = startOfDay(ts);
   const today = startOfDay(now);
@@ -26,22 +57,6 @@ export function dayLabel(ts, now, locale) {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-// Groups records (already sorted) into [{ key, label, records }] by local day,
-// keeping their order.
-export function groupByDay(records, now, locale) {
-  const groups = [];
-  for (const record of records) {
-    const key = startOfDay(record.closedAt);
-    let group = groups[groups.length - 1];
-    if (!group || group.key !== key) {
-      group = { key, label: dayLabel(record.closedAt, now, locale), records: [] };
-      groups.push(group);
-    }
-    group.records.push(record);
-  }
-  return groups;
 }
 
 export const PRESETS = ['hour', 'today', '7d', '30d', 'all'];

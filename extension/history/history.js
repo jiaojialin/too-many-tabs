@@ -1,19 +1,17 @@
 import { createHistoryDb } from '../lib/db.js';
 import { exportFilename, toCsv, toJson, toSqlite } from '../lib/export.js';
-import { dayLabel, formatClock, formatFull, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
+import { dayCountText, dayLabel, formatClock, formatFull, isDayClipped, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
 import { el, favicon, isLinkable, reasonBadge, reopen } from '../ui/render.js';
 
-const PAGE_SIZE = 100;
 const history = createHistoryDb();
 const $ = (id) => document.getElementById(id);
 
+// The page shows one day at a time (README "History page").
 let order = 'desc';
-let cursor = null;
-let exhausted = false;
-let loading = false;
 let generation = 0;
-let lastDay = null;
-let currentList = null;
+let currentDay = null;
+let olderDay = null;
+let newerDay = null;
 
 function filters() {
   const preset = $('preset').value;
@@ -72,68 +70,43 @@ function row(record) {
   return node;
 }
 
-// Drops a deleted row, its day section if that is now empty, and refreshes
-// the empty-state message and domain filter.
-function removeRow(node) {
-  const section = node.closest('.day');
+// After a delete, refresh the day (its count, or another day if it is now
+// empty). The domain list is refreshed first: it may drop the selected domain.
+async function removeRow(node) {
   node.remove();
-  if (section && !section.querySelector('.row')) {
-    if (section.lastElementChild === currentList) {
-      lastDay = null;
-      currentList = null;
-    }
-    section.remove();
-  }
-  $('empty').hidden = $('timeline').childElementCount > 0 || !exhausted;
-  renderDomains();
-  if (!exhausted && isSentinelVisible()) loadMore();
+  await renderDomains();
+  show(currentDay);
 }
 
-function append(records) {
+// Shows `day` (start of a local day; null = the most recent day with
+// records). One filter snapshot is used for the whole pass.
+async function show(day, f = filters()) {
+  const gen = ++generation;
+  const page = await history.dayPage(day, f);
+  if (gen !== generation) return;
+  currentDay = page.day;
+  newerDay = page.newer;
+  olderDay = page.older;
+  render(page.records, f);
+}
+
+function render(records, f) {
   const now = Date.now();
-  for (const record of records) {
-    const day = startOfDay(record.closedAt);
-    if (day !== lastDay) {
-      lastDay = day;
-      currentList = el('div');
-      $('timeline').append(el('section', { class: 'day' }, el('h2', {}, dayLabel(record.closedAt, now)), currentList));
-    }
-    currentList.append(row(record));
-  }
+  $('day-nav').hidden = currentDay === null;
+  $('empty').hidden = currentDay !== null;
+  $('newer').disabled = newerDay === null;
+  $('older').disabled = olderDay === null;
+  $('newer').title = newerDay === null ? '' : dayLabel(newerDay, now);
+  $('older').title = olderDay === null ? '' : dayLabel(olderDay, now);
+  $('day-label').textContent = currentDay === null ? '' : dayLabel(currentDay, now);
+  const filtered = currentDay !== null && (Boolean(f.text || f.domain || f.reason) || isDayClipped(f, currentDay));
+  $('day-count').textContent = currentDay === null ? '' : dayCountText(records.length, currentDay, now, { filtered });
+  $('timeline').replaceChildren(...records.map(row));
 }
 
-async function loadMore() {
-  if (loading || exhausted) return;
-  loading = true;
-  const gen = generation;
-  try {
-    const page = await history.query({ ...filters(), limit: PAGE_SIZE, after: cursor });
-    if (gen === generation) {
-      append(page.records);
-      cursor = page.next;
-      exhausted = !page.next;
-      $('empty').hidden = $('timeline').childElementCount > 0;
-    }
-  } finally {
-    loading = false;
-  }
-  // Filters changed while this page was loading: start over for the new ones.
-  if (gen !== generation) return loadMore();
-  if (!exhausted && isSentinelVisible()) loadMore();
-}
-
-function isSentinelVisible() {
-  return $('sentinel').getBoundingClientRect().top < window.innerHeight + 200;
-}
-
+// Filters changed: jump to the most recent day that matches them.
 function reset() {
-  generation++;
-  cursor = null;
-  exhausted = false;
-  lastDay = null;
-  currentList = null;
-  $('timeline').replaceChildren();
-  loadMore();
+  show(null);
 }
 
 async function renderDomains() {
@@ -184,7 +157,7 @@ $('text').addEventListener('input', () => {
 $('order').addEventListener('click', () => {
   order = order === 'desc' ? 'asc' : 'desc';
   $('order').textContent = order === 'desc' ? 'Newest first' : 'Oldest first';
-  reset();
+  show(currentDay); // re-sorts the day shown; stays on it
 });
 $('filters').addEventListener('submit', (event) => event.preventDefault());
 
@@ -208,9 +181,13 @@ $('clear').addEventListener('click', async () => {
   reset();
 });
 
-new IntersectionObserver((entries) => {
-  if (entries.some((entry) => entry.isIntersecting)) loadMore();
-}, { rootMargin: '200px' }).observe($('sentinel'));
+$('newer').addEventListener('click', () => newerDay !== null && show(newerDay));
+$('older').addEventListener('click', () => olderDay !== null && show(olderDay));
+
+// Coming back to the page: pick up tabs closed meanwhile (e.g. today's count).
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) show(currentDay === startOfDay(Date.now()) ? null : currentDay);
+});
 
 renderDomains();
 reset();

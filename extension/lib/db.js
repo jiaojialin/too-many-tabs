@@ -1,5 +1,7 @@
 // IndexedDB store of every tab the extension auto-closed.
 
+import { endOfDay, narrowRange, startOfDay } from './timeline.js';
+
 export const DB_NAME = 'too-many-tabs';
 export const DB_VERSION = 1;
 export const STORE = 'closedTabs';
@@ -86,6 +88,37 @@ export function createHistoryDb(idb = globalThis.indexedDB, keyRange = globalThi
       const last = records[records.length - 1];
       const next = records.length >= limit && last ? { closedAt: last.closedAt, id: last.id } : null;
       return { records, next };
+    },
+
+    // The nearest local day with matching records before ('older') or after
+    // ('newer') `day`, or the most recent such day ('latest'); null if none.
+    // `filters` are query() filters (from, to, text, domain, reason).
+    async nearestDay(day, direction, filters = {}) {
+      let range = { from: filters.from ?? null, to: filters.to ?? null };
+      if (direction === 'older') range = narrowRange(range, -Infinity, day - 1);
+      if (direction === 'newer') range = narrowRange(range, endOfDay(day) + 1, Infinity);
+      const order = direction === 'newer' ? 'asc' : 'desc';
+      const { records } = await this.query({ ...filters, ...range, order, limit: 1 });
+      return records.length ? startOfDay(records[0].closedAt) : null;
+    },
+
+    // One page of the history: a day's matching records (in `filters.order`)
+    // and the neighbouring days that have any. `day` null means the most
+    // recent day; a day with no matching records falls back to the next older
+    // day, then the next newer one. `day` is null when nothing matches.
+    async dayPage(day, filters = {}) {
+      const target = day ?? (await this.nearestDay(null, 'latest', filters));
+      if (target === null) return { day: null, records: [], newer: null, older: null };
+      const { records } = await this.query({ ...filters, ...narrowRange(filters, target, endOfDay(target)), limit: Infinity });
+      if (!records.length) {
+        const fallback = (await this.nearestDay(target, 'older', filters)) ?? (await this.nearestDay(target, 'newer', filters));
+        return fallback === null ? { day: null, records: [], newer: null, older: null } : this.dayPage(fallback, filters);
+      }
+      const [newer, older] = await Promise.all([
+        this.nearestDay(target, 'newer', filters),
+        this.nearestDay(target, 'older', filters),
+      ]);
+      return { day: target, records, newer, older };
     },
 
     async domains() {
