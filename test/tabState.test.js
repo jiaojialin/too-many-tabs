@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { newEntry, refreshEntry, rematchEntries } from '../extension/lib/tabState.js';
+import { newEntry, refreshEntry, rematchEntries, syncAudioFlags } from '../extension/lib/tabState.js';
 
 const tab = (id, url, index = 0, extra = {}) => ({ id, url, index, windowId: 1, title: '', ...extra });
 
@@ -50,4 +50,27 @@ test('rematchEntries uses each stored entry at most once', () => {
   const result = rematchEntries(stored, [tab(20, 'https://a.test/', 0), tab(21, 'https://a.test/', 1)], 100);
   assert.equal(result[20].lastVisitedAt, 1);
   assert.equal(result[21].lastVisitedAt, 100);
+});
+
+test('rematchEntries drops pause markers, which do not survive a restart', () => {
+  const stored = { 1: { url: 'https://a.test/', index: 0, lastVisitedAt: 5, pausedByUs: true } };
+  assert.equal(rematchEntries(stored, [tab(1, 'https://a.test/')], 100)[1].pausedByUs, false);
+});
+
+test('refreshEntry waits for loading to finish and clears pause markers on navigation', () => {
+  const entry = { ...newEntry(tab(1, 'https://a.test/'), 1), pausedByUs: true };
+  const loading = refreshEntry(entry, tab(1, 'https://a.test/next', 0, { status: 'loading' }), 2);
+  assert.equal(loading.url, 'https://a.test/', 'held back while loading');
+  const done = refreshEntry(loading, tab(1, 'https://a.test/next', 0, { status: 'complete' }), 3);
+  assert.equal(done.url, 'https://a.test/next');
+  assert.equal(done.pausedByUs, false);
+});
+
+test('syncAudioFlags clears flags the tab state no longer supports', () => {
+  const ours = { muted: true, reason: 'extension', extensionId: 'me' };
+  assert.equal(syncAudioFlags({ mutedByUs: true }, { mutedInfo: ours }, 'me').mutedByUs, true);
+  assert.equal(syncAudioFlags({ mutedByUs: true }, { mutedInfo: { muted: false } }, 'me').mutedByUs, false);
+  assert.equal(syncAudioFlags({ mutedByUs: true }, { mutedInfo: { ...ours, extensionId: 'other' } }, 'me').mutedByUs, false);
+  assert.equal(syncAudioFlags({ pausedByUs: true, audible: false }, { audible: true }, 'me').pausedByUs, false);
+  assert.equal(syncAudioFlags({ pausedByUs: true, audible: true }, { audible: true }, 'me').pausedByUs, true);
 });

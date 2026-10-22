@@ -1,7 +1,7 @@
 import { createHistoryDb } from '../lib/db.js';
 import { exportFilename, toCsv, toJson, toSqlite } from '../lib/export.js';
 import { dayLabel, formatClock, formatFull, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
-import { el, favicon, reasonBadge, reopen } from '../ui/render.js';
+import { el, favicon, isLinkable, reasonBadge, reopen } from '../ui/render.js';
 
 const PAGE_SIZE = 100;
 const history = createHistoryDb();
@@ -19,7 +19,7 @@ function filters() {
   const preset = $('preset').value;
   const range =
     preset === 'custom'
-      ? { from: parseLocalDateTime($('from').value), to: parseLocalDateTime($('to').value) }
+      ? { from: parseLocalDateTime($('from').value), to: parseLocalDateTime($('to').value, { endOfMinute: true }) }
       : rangeForPreset(preset, Date.now());
   return {
     ...range,
@@ -42,7 +42,7 @@ function row(record) {
       el(
         'a',
         {
-          href: record.url,
+          href: isLinkable(record.url) ? record.url : '#',
           title: record.url,
           onclick: (event) => {
             event.preventDefault();
@@ -63,13 +63,30 @@ function row(record) {
         title: 'Delete from history',
         onclick: async () => {
           await history.delete(record.id);
-          node.remove();
+          removeRow(node);
         },
       },
       'Delete',
     ),
   );
   return node;
+}
+
+// Drops a deleted row, its day section if that is now empty, and refreshes
+// the empty-state message and domain filter.
+function removeRow(node) {
+  const section = node.closest('.day');
+  node.remove();
+  if (section && !section.querySelector('.row')) {
+    if (section.lastElementChild === currentList) {
+      lastDay = null;
+      currentList = null;
+    }
+    section.remove();
+  }
+  $('empty').hidden = $('timeline').childElementCount > 0 || !exhausted;
+  renderDomains();
+  if (!exhausted && isSentinelVisible()) loadMore();
 }
 
 function append(records) {

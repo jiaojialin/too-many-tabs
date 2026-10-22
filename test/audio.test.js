@@ -24,6 +24,12 @@ test('shouldResume only for the visited tab the extension paused or muted', () =
   assert.ok(!shouldResume(playing(2), { pausedByUs: true }, ctx()));
 });
 
+test('shouldResume also when settings no longer want the tab paused', () => {
+  assert.ok(shouldResume(playing(2), { pausedByUs: true }, ctx({ audioPauseEnabled: false })));
+  assert.ok(shouldResume(playing(2), { mutedByUs: true }, ctx({ keepPlayingHosts: ['video.test'] })));
+  assert.ok(!shouldResume(playing(2), {}, ctx({ audioPauseEnabled: false })));
+});
+
 test('isKeepPlaying matches subdomains', () => {
   assert.ok(isKeepPlaying('https://music.youtube.com/', ['youtube.com']));
   assert.ok(!isKeepPlaying('https://www.youtube.com/', ['music.youtube.com']));

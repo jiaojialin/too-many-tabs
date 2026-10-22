@@ -23,6 +23,17 @@ export function reasonBadge(reason) {
   return el('span', { class: `badge ${reason}` }, REASON_LABELS[reason] ?? reason);
 }
 
-export function reopen(url) {
-  return chrome.tabs.create({ url });
+// Only these schemes are rendered as clickable links.
+export function isLinkable(url) {
+  return /^(https?|file|ftp):/i.test(url ?? '');
+}
+
+// Reopens a closed tab. Some URLs (e.g. certain chrome:// pages) can't be
+// opened by an extension; report that instead of failing silently.
+export async function reopen(url) {
+  try {
+    await chrome.tabs.create({ url });
+  } catch (error) {
+    alert(`Could not reopen ${url}: ${error.message}`);
+  }
 }

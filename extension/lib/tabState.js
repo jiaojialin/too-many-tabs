@@ -19,24 +19,47 @@ export function newEntry(tab, now, siteRules = []) {
     lastVisitedAt: now,
     loginLike: nextLogoutState(undefined, tab, now, siteRules).loginLike,
     loggedOutSince: null,
+    // A tab first seen mid-load has no reliable baseline yet (its title may
+    // not have arrived), so the first completed page can't count as a logout.
+    settled: tab.status !== 'loading',
+    audible: Boolean(tab.audible),
     pausedByUs: false,
     mutedByUs: false,
   };
 }
 
 // Brings an entry up to date with the tab's current URL/title/position,
-// running logged-out detection when the URL or title changed.
+// running logged-out detection when the URL or title changed. While a tab is
+// loading, URL/title changes are held back until the page settles, so
+// intermediate redirects and half-loaded titles don't count as transitions.
 export function refreshEntry(entry, tab, now, siteRules = []) {
   const url = tab.url ?? '';
   const title = tab.title ?? '';
   const next = { ...entry, windowId: tab.windowId, index: tab.index };
-  if (url !== entry.url || title !== entry.title) {
-    Object.assign(next, nextLogoutState(entry, { url, title }, now, siteRules), {
+  if (tab.status === 'loading') return next;
+  if (url !== entry.url || title !== entry.title || entry.settled === false) {
+    const prev = entry.settled === false ? undefined : entry;
+    Object.assign(next, nextLogoutState(prev, { url, title }, now, siteRules), {
       url,
       title,
       normalizedUrl: normalizeUrl(url),
+      settled: true,
     });
+    // A new document has none of the media we paused.
+    if (url !== entry.url) next.pausedByUs = false;
   }
+  return next;
+}
+
+// Keeps the paused/muted-by-us flags honest: the user may unmute a tab, and a
+// page we paused may start playing again on its own (then it gets paused
+// again after the usual delay).
+export function syncAudioFlags(entry, tab, extensionId) {
+  const next = { ...entry, audible: Boolean(tab.audible) };
+  const muted = tab.mutedInfo;
+  const mutedByExtension = Boolean(muted?.muted && muted.reason === 'extension' && muted.extensionId === extensionId);
+  if (next.mutedByUs && !mutedByExtension) next.mutedByUs = false;
+  if (next.pausedByUs && !next.mutedByUs && tab.audible && entry.audible === false) next.pausedByUs = false;
   return next;
 }
 
@@ -49,7 +72,8 @@ export function rematchEntries(storedEntries, tabs, now, siteRules = []) {
   const take = (key, tab) => {
     const entry = unused.get(key);
     unused.delete(key);
-    result[tab.id] = { ...entry, windowId: tab.windowId, index: tab.index };
+    // Injected pause markers don't survive a restart or reload.
+    result[tab.id] = { ...entry, windowId: tab.windowId, index: tab.index, pausedByUs: false };
   };
   const pending = [];
   for (const tab of tabs) {

@@ -61,6 +61,11 @@ test('query pages with a cursor, including records closed at the same time', asy
   }
 });
 
+test('query with from after to returns nothing instead of throwing', async () => {
+  await history.add(record(10));
+  assert.deepEqual(await history.query({ from: 20, to: 5 }), { records: [], next: null });
+});
+
 test('query with limit Infinity returns everything', async () => {
   for (let t = 0; t < 120; t++) await history.add(record(t));
   const page = await history.query({ limit: Infinity });

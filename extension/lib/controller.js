@@ -2,11 +2,11 @@
 // reconcile(): refresh tracked state, handle background audio, close due tabs,
 // then schedule the next sweep for the next deadline (README "Design").
 
-import { pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
+import { isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
 import { recordFromTab } from './db.js';
 import { decide, lastVisitedAt, nextDeadline } from './rules.js';
 import { SETTINGS_KEY, mergeSettings } from './settings.js';
-import { STATE_KEY, emptyState, newEntry, refreshEntry, rematchEntries } from './tabState.js';
+import { STATE_KEY, emptyState, newEntry, refreshEntry, rematchEntries, syncAudioFlags } from './tabState.js';
 import { hostOf, normalizeUrl } from './url.js';
 
 export const SWEEP_ALARM = 'sweep';
@@ -18,11 +18,12 @@ const SESSION_KEY = 'sessionStarted';
 const ALL_URLS = { origins: ['<all_urls>'] };
 
 function freshOps() {
-  return { focusedWindowId: null, pause: new Set(), muteCheck: new Set() };
+  return { pause: new Set(), muteCheck: new Set(), replaced: [] };
 }
 
 export function createController({ chrome, history, now = () => Date.now(), timers = globalThis, log = console }) {
   const pauseTimers = new Map();
+  const muteTimers = new Map();
   let deadlineTimer = null;
   let pending = freshOps();
   let running = null;
@@ -31,7 +32,7 @@ export function createController({ chrome, history, now = () => Date.now(), time
   // Coalesces bursts of events: at most one reconcile runs at a time, and
   // requests arriving meanwhile trigger exactly one more pass.
   function request(op = {}) {
-    if (op.focusedWindowId != null) pending.focusedWindowId = op.focusedWindowId;
+    if (op.replaced) pending.replaced.push(op.replaced);
     if (op.pause != null) pending.pause.add(op.pause);
     if (op.muteCheck != null) pending.muteCheck.add(op.muteCheck);
     if (running) {
@@ -77,7 +78,15 @@ export function createController({ chrome, history, now = () => Date.now(), time
       state.activeWindowId = null;
       await chrome.storage.session.set({ [SESSION_KEY]: true });
     }
-    if (ops.focusedWindowId != null) state.activeWindowId = ops.focusedWindowId;
+    for (const [addedTabId, removedTabId] of ops.replaced) {
+      // Chrome swapped in a new tab (e.g. prerender); keep its history.
+      if (state.entries[removedTabId]) {
+        state.entries[addedTabId] = state.entries[removedTabId];
+        delete state.entries[removedTabId];
+      }
+      if (state.visitedTabId === removedTabId) state.visitedTabId = addedTabId;
+      cancelAudioTimers(removedTabId);
+    }
     state.activeWindowId = await resolveActiveWindowId(state.activeWindowId, tabs);
 
     const visited = tabs.find((tab) => tab.active && tab.windowId === state.activeWindowId);
@@ -91,7 +100,8 @@ export function createController({ chrome, history, now = () => Date.now(), time
     const entries = {};
     for (const tab of tabs) {
       const old = state.entries[tab.id];
-      entries[tab.id] = old ? refreshEntry(old, tab, t, settings.siteRules) : newEntry(tab, t, settings.siteRules);
+      const entry = old ? refreshEntry(old, tab, t, settings.siteRules) : newEntry(tab, t, settings.siteRules);
+      entries[tab.id] = syncAudioFlags(entry, tab, chrome.runtime.id);
     }
     if (visited) entries[visited.id].lastVisitedAt = t;
     state.entries = entries;
@@ -109,15 +119,20 @@ export function createController({ chrome, history, now = () => Date.now(), time
     await ensureBackstop();
   }
 
-  // The last-focused normal window, even while Chrome itself is unfocused.
-  async function resolveActiveWindowId(current, tabs) {
-    if (current != null && tabs.some((tab) => tab.windowId === current)) return current;
+  // The last-focused non-incognito window, even while Chrome itself is
+  // unfocused. Asked fresh on every pass so it never lags behind a focus
+  // change. If an incognito window has focus, the previous active window is
+  // kept; failing that, some open window is protected rather than none.
+  async function resolveActiveWindowId(previous, tabs) {
+    const isOpen = (id) => id != null && tabs.some((tab) => tab.windowId === id);
     try {
       const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
-      return win && !win.incognito ? win.id : null;
+      if (win && !win.incognito && isOpen(win.id)) return win.id;
     } catch {
-      return null;
+      // Fall through.
     }
+    if (isOpen(previous)) return previous;
+    return tabs[0]?.windowId ?? null;
   }
 
   // Writes the history record first; if the tab can't be removed, the record
@@ -149,20 +164,20 @@ export function createController({ chrome, history, now = () => Date.now(), time
 
   async function handleAudio(tabs, entries, ctx, ops) {
     const present = new Set(tabs.map((tab) => tab.id));
-    for (const id of pauseTimers.keys()) if (!present.has(id)) cancelPause(id);
+    for (const id of [...pauseTimers.keys(), ...muteTimers.keys()]) if (!present.has(id)) cancelAudioTimers(id);
 
     for (const tab of tabs) {
       const entry = entries[tab.id];
       if (shouldResume(tab, entry, ctx)) {
-        cancelPause(tab.id);
+        cancelAudioTimers(tab.id);
         await resume(tab, entry);
         continue;
       }
       if (ops.muteCheck.has(tab.id)) await muteIfStillAudible(tab, entry, ctx);
       if (!shouldPause(tab, entry, ctx)) {
-        cancelPause(tab.id);
+        if (pauseTimers.has(tab.id)) clearTimer(pauseTimers, tab.id);
       } else if (ops.pause.has(tab.id)) {
-        cancelPause(tab.id);
+        clearTimer(pauseTimers, tab.id);
         await pause(tab, entry);
       } else if (!pauseTimers.has(tab.id)) {
         const delay = ctx.settings.audioPauseDelaySeconds * 1000;
@@ -177,10 +192,15 @@ export function createController({ chrome, history, now = () => Date.now(), time
     }
   }
 
-  function cancelPause(tabId) {
-    if (!pauseTimers.has(tabId)) return;
-    timers.clearTimeout(pauseTimers.get(tabId));
-    pauseTimers.delete(tabId);
+  function clearTimer(map, tabId) {
+    if (!map.has(tabId)) return;
+    timers.clearTimeout(map.get(tabId));
+    map.delete(tabId);
+  }
+
+  function cancelAudioTimers(tabId) {
+    clearTimer(pauseTimers, tabId);
+    clearTimer(muteTimers, tabId);
   }
 
   async function hasHostAccess() {
@@ -207,14 +227,29 @@ export function createController({ chrome, history, now = () => Date.now(), time
     }
     if (paused > 0) {
       entry.pausedByUs = true;
-      timers.setTimeout(() => request({ muteCheck: tab.id }), MUTE_CHECK_DELAY);
+      clearTimer(muteTimers, tab.id);
+      muteTimers.set(
+        tab.id,
+        timers.setTimeout(() => {
+          muteTimers.delete(tab.id);
+          return request({ muteCheck: tab.id });
+        }, MUTE_CHECK_DELAY),
+      );
     } else {
       await mute(tab, entry);
     }
   }
 
   async function muteIfStillAudible(tab, entry, ctx) {
-    if (entry?.pausedByUs && !entry.mutedByUs && tab.audible && !tab.mutedInfo?.muted && tab.id !== ctx.visitedTabId) {
+    if (
+      entry?.pausedByUs &&
+      !entry.mutedByUs &&
+      tab.audible &&
+      !tab.mutedInfo?.muted &&
+      tab.id !== ctx.visitedTabId &&
+      ctx.settings.audioPauseEnabled &&
+      !isKeepPlaying(tab.url, ctx.settings.keepPlayingHosts)
+    ) {
       await mute(tab, entry);
     }
   }
@@ -262,15 +297,15 @@ export function createController({ chrome, history, now = () => Date.now(), time
     }
   }
 
-  async function onFocusChanged(windowId) {
-    if (windowId === chrome.windows.WINDOW_ID_NONE) return;
-    try {
-      const win = await chrome.windows.get(windowId);
-      if (win.type === 'normal' && !win.incognito) return request({ focusedWindowId: windowId });
-    } catch {
-      // Window already gone.
-    }
+  // Chrome losing focus to another app changes nothing; otherwise the next
+  // pass reads the newly focused window itself.
+  function onFocusChanged(windowId) {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) return undefined;
     return request();
+  }
+
+  function onTabReplaced(addedTabId, removedTabId) {
+    return request({ replaced: [addedTabId, removedTabId] });
   }
 
   const RELEVANT_CHANGES = ['url', 'title', 'audible', 'pinned', 'mutedInfo'];
@@ -281,5 +316,5 @@ export function createController({ chrome, history, now = () => Date.now(), time
     return undefined;
   }
 
-  return { request, onFocusChanged, onTabUpdated };
+  return { request, onFocusChanged, onTabReplaced, onTabUpdated };
 }

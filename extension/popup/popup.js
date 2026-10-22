@@ -1,4 +1,5 @@
 import { createHistoryDb } from '../lib/db.js';
+import { isKeepPlaying } from '../lib/audio.js';
 import { SETTINGS_KEY, mergeSettings, toggleHost } from '../lib/settings.js';
 import { dayLabel, formatClock, formatFull } from '../lib/timeline.js';
 import { hostOf } from '../lib/url.js';
@@ -18,7 +19,7 @@ async function renderKeepPlaying() {
   const settings = await loadSettings();
   const checkbox = document.getElementById('keep-playing');
   document.getElementById('site-host').textContent = host;
-  checkbox.checked = settings.keepPlayingHosts.includes(host);
+  checkbox.checked = isKeepPlaying(tab.url, settings.keepPlayingHosts);
   checkbox.addEventListener('change', async () => {
     const latest = await loadSettings();
     const keepPlayingHosts = toggleHost(latest.keepPlayingHosts, host, checkbox.checked);

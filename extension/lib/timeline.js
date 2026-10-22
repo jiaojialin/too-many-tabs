@@ -69,8 +69,11 @@ export function formatFull(ts, locale) {
 }
 
 // Value of an <input type="datetime-local"> -> epoch ms, or null if empty.
-export function parseLocalDateTime(value) {
+// The input has minute precision, so an upper bound covers the whole minute
+// (a "To 14:32" filter includes tabs closed at 14:32:45).
+export function parseLocalDateTime(value, { endOfMinute = false } = {}) {
   if (!value) return null;
   const ts = new Date(value).getTime();
-  return Number.isNaN(ts) ? null : ts;
+  if (Number.isNaN(ts)) return null;
+  return endOfMinute ? ts + 59_999 : ts;
 }

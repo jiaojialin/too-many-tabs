@@ -34,11 +34,13 @@ function thresholds(settings) {
 export function dueReason(tab, entry, ctx) {
   const idle = ctx.now - lastVisitedAt(tab, entry, ctx);
   const limit = thresholds(ctx.settings);
-  if (entry?.loggedOutSince && idle >= limit.loggedOut) return 'logged-out';
+  if (entry?.loggedOutSince && tab.status !== 'loading' && idle >= limit.loggedOut) return 'logged-out';
   if (idle >= limit.stale) return 'stale';
   return null;
 }
 
+// Tabs still loading are left out until they finish (README: "run the
+// duplicate check when loading completes").
 // Of a group of duplicate tabs, the one to keep: a tab in the active window
 // counts as most recently visited; ties go to the newest tab (highest id).
 export function pickDuplicateWinner(group, entries, ctx) {
@@ -60,7 +62,7 @@ export function pickDuplicateWinner(group, entries, ctx) {
 export function groupDuplicates(tabs) {
   const groups = new Map();
   for (const tab of tabs) {
-    if (tab.incognito || !isWebUrl(tab.url)) continue;
+    if (tab.incognito || tab.status === 'loading' || !isWebUrl(tab.url)) continue;
     const key = normalizeUrl(tab.url);
     if (!key) continue;
     if (!groups.has(key)) groups.set(key, []);

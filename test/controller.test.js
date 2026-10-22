@@ -22,6 +22,9 @@ function setup(tabs, options = {}) {
     advance(ms) {
       now += ms;
     },
+    focus(windowId) {
+      chrome._state.focusedWindowId = windowId;
+    },
     get now() {
       return now;
     },
@@ -96,8 +99,10 @@ test('visiting a tab resets its timer', async () => {
   await env.controller.request();
   env.advance(23 * HOUR);
   // Focus window 2 (visit tab 2), then go back to window 1.
+  env.focus(2);
   await env.controller.onFocusChanged(2);
   env.advance(MINUTE);
+  env.focus(1);
   await env.controller.onFocusChanged(1);
   env.advance(2 * HOUR);
   await env.controller.request();
@@ -133,11 +138,105 @@ test('only reacts to relevant tab updates', async () => {
   assert.ok(env.controller.onTabUpdated(1, { audible: true }) instanceof Promise);
 });
 
-test('ignores focus moving to an incognito window', async () => {
+test('focus moving to an incognito window keeps the previous active window', async () => {
   const env = setup(baseTabs());
   await env.controller.request();
+  env.focus(99);
   await env.controller.onFocusChanged(99);
   assert.equal(env.chrome.storage.local.data[STATE_KEY].activeWindowId, 1);
+});
+
+test('with an incognito window focused at startup, a normal window is still protected', async () => {
+  const env = setup(baseTabs());
+  env.focus(99);
+  env.advance(0);
+  await env.controller.request();
+  env.advance(25 * HOUR);
+  await env.controller.request();
+  assert.equal(env.chrome._state.removed.length, 1, 'one window stays protected');
+});
+
+test('the active window is read fresh on every pass, so a focus change never lags', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://a.test/page', title: 'A' },
+    { id: 2, windowId: 2, index: 0, active: true, url: 'https://b.test/', title: 'B' },
+  ];
+  const env = setup(tabs);
+  await env.controller.request();
+  // The user focuses window 2 and opens a duplicate of tab 1 there.
+  env.focus(2);
+  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: false, url: 'https://a.test/page', pinned: false, audible: false, incognito: false });
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [1], 'the copy in the newly focused window wins');
+});
+
+test('onFocusChanged ignores Chrome losing focus', () => {
+  const env = setup(baseTabs());
+  assert.equal(env.controller.onFocusChanged(-1), undefined);
+});
+
+test('onTabReplaced carries the old tab state over to the new id', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  env.advance(20 * HOUR);
+  await env.controller.request();
+  env.tab(2).id = 22;
+  await env.controller.onTabReplaced(22, 2);
+  const entries = env.chrome.storage.local.data[STATE_KEY].entries;
+  assert.equal(entries[2], undefined);
+  assert.equal(entries[22].lastVisitedAt, env.now - 20 * HOUR);
+  env.advance(4 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [22]);
+});
+
+test('a login page opened directly is not flagged when its title arrives late', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: false, url: 'https://bank.test/auth', title: '', status: 'loading', pinned: false, audible: false, incognito: false });
+  await env.controller.request();
+  Object.assign(env.tab(3), { title: 'Sign In' });
+  await env.controller.request();
+  Object.assign(env.tab(3), { status: 'complete' });
+  await env.controller.request();
+  assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[3].loggedOutSince, null);
+});
+
+test('redirects while loading are not logout transitions, and loading tabs are not closed', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  const tab = env.tab(2);
+  Object.assign(tab, { url: 'https://other.test/login?prompt=none', status: 'loading' });
+  await env.controller.request();
+  Object.assign(tab, { url: 'https://other.test/', status: 'complete' });
+  await env.controller.request();
+  assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[2].loggedOutSince, null);
+});
+
+test('a real logout after the page finished loading is flagged', async () => {
+  const env = setup(baseTabs());
+  await env.controller.request();
+  Object.assign(env.tab(2), { url: 'https://other.test/session-expired', status: 'loading' });
+  await env.controller.request();
+  Object.assign(env.tab(2), { status: 'complete', title: 'Session expired' });
+  await env.controller.request();
+  assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[2].loggedOutSince, env.now);
+});
+
+test('duplicates wait until the new copy has finished loading', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 2, index: 0, active: true, url: 'https://a.test/page' },
+  ];
+  const env = setup(tabs);
+  await env.controller.request();
+  env.chrome._state.tabs.push({ id: 3, windowId: 2, index: 1, active: false, url: 'https://a.test/page', status: 'loading', pinned: false, audible: false, incognito: false });
+  env.advance(MINUTE);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, []);
+  env.tab(3).status = 'complete';
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [2], 'the newer copy wins on a tie of visits');
 });
 
 test('never closes incognito, pinned or audible tabs', async () => {
@@ -297,4 +396,67 @@ test('concurrent requests are coalesced into serial passes', async () => {
   };
   await Promise.all([env.controller.request(), env.controller.request(), env.controller.request()]);
   assert.equal(calls, 2);
+});
+
+const audioTabs = (url = 'https://game.test/') => [
+  { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+  { id: 2, windowId: 2, index: 0, active: true, url, audible: true },
+];
+
+test('a tab the user unmuted is protected again while it plays', async () => {
+  const env = setup(audioTabs());
+  await env.controller.request();
+  await env.timers.runAll();
+  assert.equal(env.tab(2).mutedInfo.muted, true);
+  env.tab(2).mutedInfo = { muted: false, reason: 'user' };
+  env.advance(25 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [], 'audible and no longer muted by us');
+  assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[2].mutedByUs, false);
+});
+
+test('playback that restarts in a paused background tab is paused again', async () => {
+  const env = setup(audioTabs('https://video.test/'), { hostAccess: true });
+  await env.controller.request();
+  await env.timers.runAll();
+  assert.deepEqual(env.chrome._state.scripts, [[2, 'pauseMediaInPage']]);
+  env.tab(2).audible = false;
+  await env.timers.runAll();
+  env.tab(2).audible = true;
+  await env.controller.request();
+  await env.timers.runAll();
+  assert.deepEqual(env.chrome._state.scripts.map((s) => s[1]), ['pauseMediaInPage', 'pauseMediaInPage']);
+});
+
+test('adding a paused tab to the keep-playing list resumes it in the background', async () => {
+  const env = setup(audioTabs('https://video.test/'), { hostAccess: true });
+  await env.controller.request();
+  await env.timers.runAll();
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { keepPlayingHosts: ['video.test'] } });
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.scripts.at(-1), [2, 'resumeMediaInPage']);
+  assert.equal(env.timers.pending.size, 0, 'the pending mute check was cancelled');
+});
+
+test('turning audio pausing off unmutes tabs the extension muted', async () => {
+  const env = setup(audioTabs());
+  await env.controller.request();
+  await env.timers.runAll();
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { audioPauseEnabled: false } });
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.updates.at(-1), [2, { muted: false }]);
+});
+
+test('returning to a paused tab cancels its pending mute check', async () => {
+  const tabs = [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'https://video.test/', audible: true },
+  ];
+  const env = setup(tabs, { hostAccess: true });
+  await env.controller.request();
+  await env.timers.runAll(); // paused; mute check scheduled
+  env.tab(1).active = false;
+  env.tab(2).active = true;
+  await env.controller.request(); // resumed
+  assert.equal([...env.timers.pending.values()].filter((t) => t.ms === 4000).length, 0);
 });

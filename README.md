@@ -57,6 +57,7 @@ Behavior:
 - Checks run every minute (`chrome.alarms`), so a tab closes within ~1 minute after the threshold.
 - If logout is detected after the threshold has already passed, the tab closes at the next check.
 - Visiting the tab again resets the timer; navigating away from the login/timeout page clears the logged-out flag.
+- Transitions are evaluated only once a page has finished loading, so redirects during a load (e.g. an SSO token refresh that briefly visits a login URL) and titles that arrive late on a freshly opened login page are not mistaken for a logout. A tab that is still loading is never closed as logged-out.
 
 ### Rule 2: Duplicate tabs
 
@@ -79,10 +80,11 @@ Close any tab that has not been visited for **24 hours** (configurable).
 When the user switches to a **different tab in Chrome** while a non-selected tab is playing sound, the extension pauses that tab's playback.
 
 - **Trigger**: a tab is `audible` and is not the active tab in the last-focused Chrome window. Chrome losing focus to another application does **not** trigger pausing.
-- **Delay**: pause after a **2 second** grace period (configurable), so quick tab switching doesn't stutter playback. If the tab becomes active again within the delay, nothing happens.
+- **Delay**: pause after a **2 second** grace period (configurable, 1–25 s; longer delays aren't reliable because Chrome may suspend the idle service worker), so quick tab switching doesn't stutter playback. If the tab becomes active again within the delay, nothing happens.
 - **Pause**: inject a script (`chrome.scripting.executeScript`, all frames) that calls `.pause()` on every playing `<video>`/`<audio>` element and marks those elements as paused by the extension.
 - **Fallback mute**: if the tab is still audible shortly after the pause attempt (Web Audio, custom players, sites that auto-resume, or the script could not be injected), mute the tab with `chrome.tabs.update({ muted: true })`.
-- **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused.
+- **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused. The same happens in the background if the site is added to the keep-playing list or the feature is turned off.
+- **Staying in sync**: if the user unmutes a tab the extension muted, it is treated as a normal audible tab again. If a paused page starts playing again on its own, it is paused again after the delay. Pause markers are dropped on navigation and after a browser restart.
 - **Keep-playing list**: a user-editable list of sites (by host) that are never paused, with a one-click "Let this site keep playing" toggle in the popup.
 - **Permissions**: pausing needs host permission for all sites; it is an **optional** permission, requested when the user turns the feature on (or clicks **Allow pausing media**) in Settings. The feature is on by default, and without that permission the extension falls back to muting.
 - Incognito tabs are ignored.
@@ -139,14 +141,14 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 
 | Event | Action |
 |---|---|
-| `tabs.onActivated`, `windows.onFocusChanged` | update last-visited for the tab being left and the tab being entered; start/cancel audio-pause timers; re-run the duplicate check (the active window changed) |
-| `tabs.onUpdated` (url, title) | recompute normalized URL; run logged-out detection on the URL/title transition; run the duplicate check when loading completes |
+| `tabs.onActivated`, `windows.onFocusChanged` | update last-visited for the tab being left and the tab being entered; start/cancel audio-pause timers; re-run the duplicate check (the active window changed). The active window is read from Chrome on every pass, so it never lags behind a focus change. |
+| `tabs.onUpdated` (url, title, status) | once the page has finished loading: recompute normalized URL, run logged-out detection on the URL/title transition, and run the duplicate check (tabs still loading are left out of duplicate groups) |
 | `tabs.onUpdated` (audible) | start the 2 s audio-pause timer if the tab isn't selected |
-| `tabs.onCreated` / `onRemoved` / `onReplaced` | add / drop / re-key tab state |
+| `tabs.onCreated` / `onRemoved` / `onReplaced` | add / drop / re-key tab state (a replaced tab keeps its last-visited time and flags under its new id) |
 | `runtime.onStartup` | re-match restored tabs to stored state by URL + position |
 
 - The active tab of the active window counts as being visited continuously; its last-visited time is updated when you leave it.
-- **Active window** = the last-focused normal Chrome window. It stays the active window when Chrome loses focus to another app.
+- **Active window** = the last-focused normal, non-incognito Chrome window. It stays the active window when Chrome loses focus to another app. If an incognito window has focus, the previous active window is kept; if that is gone too, some open window is protected rather than none.
 
 ### Deadline-driven sweep
 

@@ -48,7 +48,13 @@ export function shouldPause(tab, entry, ctx) {
   );
 }
 
-// Whether the extension should undo its pause/mute on a tab.
+// Whether the extension should undo its pause/mute on a tab: when the user
+// comes back to it, or when settings no longer want it paused.
 export function shouldResume(tab, entry, ctx) {
-  return Boolean(tab.id === ctx.visitedTabId && (entry?.pausedByUs || entry?.mutedByUs));
+  if (!entry?.pausedByUs && !entry?.mutedByUs) return false;
+  return (
+    tab.id === ctx.visitedTabId ||
+    !ctx.settings.audioPauseEnabled ||
+    isKeepPlaying(tab.url, ctx.settings.keepPlayingHosts)
+  );
 }

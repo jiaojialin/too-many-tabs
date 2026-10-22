@@ -62,6 +62,7 @@ export function createHistoryDb(idb = globalThis.indexedDB, keyRange = globalThi
     // Pages through records by close time. `after` is the `next` cursor from
     // the previous page. Pass limit: Infinity to fetch everything.
     async query({ from = null, to = null, text = '', domain = '', reason = '', order = 'desc', limit = 50, after = null } = {}) {
+      if (from !== null && to !== null && from > to) return { records: [], next: null };
       const index = (await store('readonly')).index('closedAt');
       const range = keyRange.bound(from ?? -Infinity, to ?? Infinity);
       const desc = order === 'desc';

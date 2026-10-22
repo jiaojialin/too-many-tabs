@@ -31,11 +31,9 @@ export function createFakeChrome({ tabs = [], focusedWindowId = 1, hostAccess = 
     storage: { sync: storageArea(), local: storageArea(), session: storageArea() },
     windows: {
       WINDOW_ID_NONE: -1,
+      // Window 99 stands in for an incognito window.
       async getLastFocused() {
-        return { id: state.focusedWindowId, incognito: false, type: 'normal' };
-      },
-      async get(id) {
-        return { id, incognito: id === 99, type: 'normal' };
+        return { id: state.focusedWindowId, incognito: state.focusedWindowId === 99, type: 'normal' };
       },
     },
     tabs: {

@@ -39,4 +39,5 @@ test('parseLocalDateTime', () => {
   assert.equal(parseLocalDateTime('2026-10-21T14:32'), at(2026, 10, 21, 14, 32));
   assert.equal(parseLocalDateTime(''), null);
   assert.equal(parseLocalDateTime('garbage'), null);
+  assert.equal(parseLocalDateTime('2026-10-21T14:32', { endOfMinute: true }), at(2026, 10, 21, 14, 32) + 59_999);
 });

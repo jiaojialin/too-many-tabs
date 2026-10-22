@@ -1,11 +1,17 @@
 // User settings (stored in chrome.storage.sync under "settings").
 
+import { hostMatches } from './url.js';
+
 export const SETTINGS_KEY = 'settings';
 
 export const DEFAULT_SITE_RULES = [
   { host: 'chase.com', pattern: 'logon|logoff|logout|signin|timeout' },
   { host: 'fidelity.com', pattern: 'login|logout|logoff|timeout' },
 ];
+
+// Audio pauses use an in-memory timer; MV3 may suspend an idle service
+// worker after ~30 s, so longer delays aren't reliable.
+export const MAX_AUDIO_PAUSE_DELAY_SECONDS = 25;
 
 export const DEFAULT_SETTINGS = Object.freeze({
   loggedOutMinutes: 30,
@@ -28,7 +34,10 @@ export function mergeSettings(stored = {}) {
     staleHours: positiveNumber(s.staleHours, DEFAULT_SETTINGS.staleHours),
     audioPauseEnabled:
       typeof s.audioPauseEnabled === 'boolean' ? s.audioPauseEnabled : DEFAULT_SETTINGS.audioPauseEnabled,
-    audioPauseDelaySeconds: positiveNumber(s.audioPauseDelaySeconds, DEFAULT_SETTINGS.audioPauseDelaySeconds),
+    audioPauseDelaySeconds: Math.min(
+      positiveNumber(s.audioPauseDelaySeconds, DEFAULT_SETTINGS.audioPauseDelaySeconds),
+      MAX_AUDIO_PAUSE_DELAY_SECONDS,
+    ),
     keepPlayingHosts: Array.isArray(s.keepPlayingHosts)
       ? s.keepPlayingHosts.filter((h) => typeof h === 'string' && h)
       : [],
@@ -86,7 +95,9 @@ export function formatSiteRules(rules) {
   return rules.map((r) => `${r.host} ${r.pattern}`).join('\n');
 }
 
+// Turning a host off also removes broader patterns that cover it (e.g.
+// "youtube.com" when switching off music.youtube.com).
 export function toggleHost(hosts, host, enabled) {
-  const without = hosts.filter((h) => h !== host);
+  const without = hosts.filter((h) => (enabled ? h !== host : !hostMatches(host, h)));
   return enabled ? [...without, host] : without;
 }

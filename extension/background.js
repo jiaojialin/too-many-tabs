@@ -15,7 +15,7 @@ chrome.alarms.onAlarm.addListener(refresh);
 chrome.tabs.onActivated.addListener(refresh);
 chrome.tabs.onCreated.addListener(refresh);
 chrome.tabs.onRemoved.addListener(refresh);
-chrome.tabs.onReplaced.addListener(refresh);
+chrome.tabs.onReplaced.addListener(controller.onTabReplaced);
 chrome.tabs.onAttached.addListener(refresh);
 chrome.tabs.onDetached.addListener(refresh);
 chrome.tabs.onUpdated.addListener(controller.onTabUpdated);

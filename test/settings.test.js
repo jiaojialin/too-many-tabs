@@ -34,4 +34,9 @@ test('parseSiteRules parses lines and reports bad ones', () => {
 test('toggleHost adds and removes without duplicates', () => {
   assert.deepEqual(toggleHost(['a.test'], 'a.test', true), ['a.test']);
   assert.deepEqual(toggleHost(['a.test', 'b.test'], 'a.test', false), ['b.test']);
+  assert.deepEqual(toggleHost(['youtube.com', 'b.test'], 'music.youtube.com', false), ['b.test'], 'removes covering patterns');
+});
+
+test('mergeSettings caps the audio pause delay', () => {
+  assert.equal(mergeSettings({ audioPauseDelaySeconds: 120 }).audioPauseDelaySeconds, 25);
 });
