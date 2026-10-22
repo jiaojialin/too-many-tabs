@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Too Many Tabs Settings</title>
+  <link rel="stylesheet" href="../ui/common.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <h1>Too Many Tabs settings</h1>
+  <p class="muted">Pinned tabs, tabs playing sound, tabs in the active window and incognito tabs are never closed.</p>
+  <form id="form">
+    <h2>Closing rules</h2>
+    <label>Close logged-out tabs
+      <input type="number" id="loggedOutMinutes" min="1" step="1" required> minutes after last visit
+    </label>
+    <label>Close any tab not visited for
+      <input type="number" id="staleHours" min="1" step="1" required> hours
+    </label>
+    <label class="block">Logged-out site rules <span class="muted">(one per line: <code>host regex</code>, matched against the full URL)</span>
+      <textarea id="siteRules" rows="4" spellcheck="false"></textarea>
+    </label>
+
+    <h2>Background audio</h2>
+    <label><input type="checkbox" id="audioPauseEnabled"> Pause audio in tabs I switch away from</label>
+    <label>Wait
+      <input type="number" id="audioPauseDelaySeconds" min="1" max="25" step="1" required> seconds before pausing
+    </label>
+    <p>
+      <span id="permission-status" class="muted"></span>
+      <button type="button" id="grant">Allow pausing media</button>
+    </p>
+    <label class="block">Sites that keep playing <span class="muted">(one host per line)</span>
+      <textarea id="keepPlayingHosts" rows="4" spellcheck="false" placeholder="music.youtube.com"></textarea>
+    </label>
+
+    <p class="actions">
+      <button type="submit" class="primary">Save</button>
+      <button type="button" id="reset">Restore defaults</button>
+      <span id="status" role="status"></span>
+    </p>
+  </form>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

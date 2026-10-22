@@ -2,7 +2,22 @@
 
 A Chrome extension (Manifest V3) that recycles tabs: it automatically closes idle tabs and tabs that are unlikely to be revisited soon, so your tab strip stays manageable and Chrome uses less RAM and CPU.
 
-> Status: spec in progress (Spec Driven Development). This README is the source of truth for behavior.
+> Built with Spec Driven Development: this README is the source of truth for behavior.
+
+## Install (unpacked)
+
+1. Clone this repo.
+2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** and pick the `extension/` folder.
+3. Optional: in the extension's **Settings**, click **Allow pausing media** so background audio is paused instead of muted.
+
+Requires Chrome 121 or later.
+
+## Using it
+
+- **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
+- **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
+- **Settings page**: thresholds (30 min / 24 h by default), logged-out site rules, background-audio options and the keep-playing list.
+- On first install every open tab starts its timers at the install time, so nothing is closed straight away.
 
 ## Definitions
 
@@ -42,6 +57,7 @@ Behavior:
 - Checks run every minute (`chrome.alarms`), so a tab closes within ~1 minute after the threshold.
 - If logout is detected after the threshold has already passed, the tab closes at the next check.
 - Visiting the tab again resets the timer; navigating away from the login/timeout page clears the logged-out flag.
+- Transitions are evaluated only once a page has finished loading, so redirects during a load (e.g. an SSO token refresh that briefly visits a login URL) and titles that arrive late on a freshly opened login page are not mistaken for a logout. A tab that is still loading is never closed as logged-out.
 
 ### Rule 2: Duplicate tabs
 
@@ -64,12 +80,13 @@ Close any tab that has not been visited for **24 hours** (configurable).
 When the user switches to a **different tab in Chrome** while a non-selected tab is playing sound, the extension pauses that tab's playback.
 
 - **Trigger**: a tab is `audible` and is not the active tab in the last-focused Chrome window. Chrome losing focus to another application does **not** trigger pausing.
-- **Delay**: pause after a **2 second** grace period (configurable), so quick tab switching doesn't stutter playback. If the tab becomes active again within the delay, nothing happens.
+- **Delay**: pause after a **2 second** grace period (configurable, 1–25 s; longer delays aren't reliable because Chrome may suspend the idle service worker), so quick tab switching doesn't stutter playback. If the tab becomes active again within the delay, nothing happens.
 - **Pause**: inject a script (`chrome.scripting.executeScript`, all frames) that calls `.pause()` on every playing `<video>`/`<audio>` element and marks those elements as paused by the extension.
 - **Fallback mute**: if the tab is still audible shortly after the pause attempt (Web Audio, custom players, sites that auto-resume, or the script could not be injected), mute the tab with `chrome.tabs.update({ muted: true })`.
-- **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused.
+- **Resume**: when the tab becomes active again, resume only the media the extension paused, and unmute only if the extension muted it. Media the user paused stays paused. The same happens in the background if the site is added to the keep-playing list or the feature is turned off.
+- **Staying in sync**: if the user unmutes a tab the extension muted, it is treated as a normal audible tab again. If a paused page starts playing again on its own, it is paused again after the delay. Pause markers are dropped on navigation and after a browser restart.
 - **Keep-playing list**: a user-editable list of sites (by host) that are never paused, with a one-click "Let this site keep playing" toggle in the popup.
-- **Permissions**: pausing needs host permission for all sites; it is requested as an **optional** permission when the user enables the feature. Without it, the extension falls back to muting.
+- **Permissions**: pausing needs host permission for all sites; it is an **optional** permission, requested when the user turns the feature on (or clicks **Allow pausing media**) in Settings. The feature is on by default, and without that permission the extension falls back to muting.
 - Incognito tabs are ignored.
 
 Interaction with closing rules: the "audible tabs are never closed" exemption effectively protects tabs on the keep-playing list (they keep playing); tabs paused/muted by this feature are no longer treated as audible (Chrome may still report a muted tab as `audible`, so tabs muted by the extension are explicitly not exempt) and become subject to the closing rules again.
@@ -124,14 +141,14 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 
 | Event | Action |
 |---|---|
-| `tabs.onActivated`, `windows.onFocusChanged` | update last-visited for the tab being left and the tab being entered; start/cancel audio-pause timers; re-run the duplicate check (the active window changed) |
-| `tabs.onUpdated` (url, title) | recompute normalized URL; run logged-out detection on the URL/title transition; run the duplicate check when loading completes |
+| `tabs.onActivated`, `windows.onFocusChanged` | update last-visited for the tab being left and the tab being entered; start/cancel audio-pause timers; re-run the duplicate check (the active window changed). The active window is read from Chrome on every pass, so it never lags behind a focus change. |
+| `tabs.onUpdated` (url, title, status) | once the page has finished loading: recompute normalized URL, run logged-out detection on the URL/title transition, and run the duplicate check (tabs still loading are left out of duplicate groups) |
 | `tabs.onUpdated` (audible) | start the 2 s audio-pause timer if the tab isn't selected |
-| `tabs.onCreated` / `onRemoved` / `onReplaced` | add / drop / re-key tab state |
+| `tabs.onCreated` / `onRemoved` / `onReplaced` | add / drop / re-key tab state (a replaced tab keeps its last-visited time and flags under its new id) |
 | `runtime.onStartup` | re-match restored tabs to stored state by URL + position |
 
 - The active tab of the active window counts as being visited continuously; its last-visited time is updated when you leave it.
-- **Active window** = the last-focused normal Chrome window. It stays the active window when Chrome loses focus to another app.
+- **Active window** = the last-focused normal, non-incognito Chrome window. It stays the active window when Chrome loses focus to another app. If an incognito window has focus, the previous active window is kept; if that is gone too, some open window is protected rather than none.
 
 ### Deadline-driven sweep
 
@@ -181,3 +198,28 @@ The duplicate check also runs immediately on navigation and focus events, using 
 ### Testability
 
 All decision logic lives in pure functions with no dependency on Chrome APIs, for example `decide(tabs, state, settings, now) → actions`, `nextDeadline`, `normalizeUrl`, `isLoggedOutTransition` and `pickDuplicateWinner`. They are unit-tested with Vitest. The Chrome-API glue is thin and tested with mocked `chrome.*` APIs.
+
+## Permissions
+
+| Permission | Why |
+|---|---|
+| `tabs` | read tab URLs and titles (duplicates, logged-out detection, history) |
+| `alarms` | deadline-driven and backstop sweeps |
+| `storage`, `unlimitedStorage` | settings, per-tab state and the closed-tab database |
+| `scripting` + optional `<all_urls>` | pause/resume media in background tabs |
+
+## Development
+
+```
+npm install
+npm test          # unit tests (node --test)
+npm run vendor    # re-copy sql.js into extension/vendor after upgrading it
+```
+
+Layout:
+
+- `extension/manifest.json`, `extension/background.js`: MV3 service worker entry point.
+- `extension/lib/`: logic. `rules.js` (closing rules, `nextDeadline`), `logout.js`, `url.js`, `audio.js`, `tabState.js`, `settings.js`, `db.js` (IndexedDB), `export.js`, `timeline.js`, and `controller.js` (wires Chrome events to the rules).
+- `extension/popup/`, `extension/history/`, `extension/options/`, `extension/ui/`: pages.
+- `extension/vendor/`: bundled sql.js (WASM) for SQLite export.
+- `test/`: unit tests; `test/helpers/fakeChrome.js` fakes the `chrome.*` APIs.

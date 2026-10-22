@@ -1,0 +1,14 @@
+{
+  "name": "too-many-tabs",
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling for the Too Many Tabs Chrome extension. The extension itself (extension/) has no build step.",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "vendor": "node scripts/vendor.mjs"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.0.0",
+    "sql.js": "^1.11.0"
+  }
+}

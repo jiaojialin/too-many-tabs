@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Closed Tabs History</title>
+  <link rel="stylesheet" href="../ui/common.css">
+  <link rel="stylesheet" href="history.css">
+</head>
+<body>
+  <header>
+    <h1>Closed tabs</h1>
+    <form id="filters">
+      <label>When
+        <select id="preset">
+          <option value="hour">Last hour</option>
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="all" selected>All</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <span id="custom-range" hidden>
+        <label>From <input type="datetime-local" id="from"></label>
+        <label>To <input type="datetime-local" id="to"></label>
+      </span>
+      <label>Search <input type="search" id="text" placeholder="Title or URL"></label>
+      <label>Domain <select id="domain"><option value="">All</option></select></label>
+      <label>Reason
+        <select id="reason">
+          <option value="">All</option>
+          <option value="logged-out">Logged out</option>
+          <option value="duplicate">Duplicate</option>
+          <option value="stale">Stale</option>
+        </select>
+      </label>
+      <button type="button" id="order">Newest first</button>
+    </form>
+    <div class="actions">
+      <span class="muted">Export matching records:</span>
+      <button type="button" data-export="json">JSON</button>
+      <button type="button" data-export="csv">CSV</button>
+      <button type="button" data-export="sqlite">SQLite</button>
+      <button type="button" id="clear" class="danger">Clear all</button>
+    </div>
+  </header>
+  <main>
+    <div id="timeline"></div>
+    <p id="empty" class="muted" hidden>No closed tabs match these filters.</p>
+    <div id="sentinel"></div>
+  </main>
+  <script type="module" src="history.js"></script>
+</body>
+</html>

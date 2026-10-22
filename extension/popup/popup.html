@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Too Many Tabs</title>
+  <link rel="stylesheet" href="../ui/common.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>Too Many Tabs</h1>
+
+  <section id="site" hidden>
+    <h2>This site</h2>
+    <label class="toggle">
+      <input type="checkbox" id="keep-playing">
+      Let <strong id="site-host"></strong> keep playing in the background
+    </label>
+  </section>
+
+  <section>
+    <h2>Recently closed</h2>
+    <div id="recent"></div>
+    <p id="empty" class="muted" hidden>Nothing closed yet.</p>
+  </section>
+
+  <footer>
+    <button id="open-history" class="primary">History</button>
+    <button id="open-settings">Settings</button>
+  </footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
