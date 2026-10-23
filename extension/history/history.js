@@ -11,6 +11,7 @@ let generation = 0;
 let currentDay = null;
 let olderDay = null;
 let newerDay = null;
+let sortMode = 'site'; // 'site' (grouped) or 'time' (latest first, no grouping)
 
 function filters() {
   const preset = $('preset').value;
@@ -99,7 +100,8 @@ function render(records, f) {
   $('day-label').textContent = currentDay === null ? '' : dayLabel(currentDay, now);
   const filtered = currentDay !== null && (Boolean(f.text || f.domain || f.reason) || isDayClipped(f, currentDay));
   $('day-count').textContent = currentDay === null ? '' : dayCountText(records.length, currentDay, now, { filtered });
-  if ($('sort').value === 'time') {
+  $('sort-bar').hidden = currentDay === null;
+  if (sortMode === 'time') {
     // Records arrive newest first; no grouping in this view.
     $('timeline').replaceChildren(...records.map(row));
     return;
@@ -173,16 +175,26 @@ for (const id of ['from', 'to', 'domain', 'reason']) $(id).addEventListener('cha
 // The sort choice is a per-viewer convenience, remembered in localStorage
 // when it is available.
 const SORT_KEY = 'historySort';
+function setSort(mode) {
+  sortMode = mode;
+  for (const button of document.querySelectorAll('[data-sort]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.sort === mode));
+  }
+}
 try {
   const saved = localStorage.getItem(SORT_KEY);
-  if (saved === 'site' || saved === 'time') $('sort').value = saved;
+  if (saved === 'site' || saved === 'time') setSort(saved);
 } catch {}
-$('sort').addEventListener('change', () => {
-  try {
-    localStorage.setItem(SORT_KEY, $('sort').value);
-  } catch {}
-  show(currentDay); // re-sorts the day shown; stays on it
-});
+for (const button of document.querySelectorAll('[data-sort]')) {
+  button.addEventListener('click', () => {
+    if (button.dataset.sort === sortMode) return;
+    setSort(button.dataset.sort);
+    try {
+      localStorage.setItem(SORT_KEY, sortMode);
+    } catch {}
+    show(currentDay); // re-sorts the day shown; stays on it
+  });
+}
 let searchTimer = null;
 $('text').addEventListener('input', () => {
   clearTimeout(searchTimer);

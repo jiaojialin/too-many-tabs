@@ -7,6 +7,8 @@ header { position: sticky; top: 0; background: var(--bg); padding-bottom: 8px; z
 .day-heading { text-align: center; }
 .day-heading h2 { margin: 0; font-size: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
 .day-heading p { margin: 2px 0 0; }
+#sort-bar:not([hidden]) { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
+#sort-bar button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .site-group h3 { margin: 16px 0 4px; font-size: 14px; overflow-wrap: anywhere; }
 .subgroup { margin-left: 16px; }
 .subgroup h4 { margin: 10px 0 2px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
