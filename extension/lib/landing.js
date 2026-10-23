@@ -14,6 +14,9 @@ export const DEFAULT_LANDING_PAGES = [
   'baidu.com',
 ];
 
+// Pages closed without a history entry: they carry no useful information.
+export const DEFAULT_HISTORY_SKIP_PAGES = ['chrome://newtab', 'chrome://new-tab-page', 'about:blank', 'google.*', 'google.*/webhp'];
+
 // Any of these means a search was made, so the page is no longer a landing page.
 const SEARCH_PARAMS = ['q', 'p', 'wd', 'query', 'text'];
 

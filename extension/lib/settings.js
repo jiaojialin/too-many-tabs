@@ -1,6 +1,6 @@
 // User settings (stored in chrome.storage.sync under "settings").
 
-import { DEFAULT_LANDING_PAGES } from './landing.js';
+import { DEFAULT_HISTORY_SKIP_PAGES, DEFAULT_LANDING_PAGES } from './landing.js';
 import { hostMatches } from './url.js';
 
 export const SETTINGS_KEY = 'settings';
@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   landingIdleMinutes: 10,
   searchIdleMinutes: 60,
   landingPages: DEFAULT_LANDING_PAGES,
+  // Closed as usual, but not recorded in the history (same pattern format).
+  historySkipPages: DEFAULT_HISTORY_SKIP_PAGES,
   audioPauseEnabled: true,
   audioPauseDelaySeconds: 2,
   keepPlayingHosts: [],
@@ -40,6 +42,9 @@ export function mergeSettings(stored = {}) {
     staleHours: positiveNumber(s.staleHours, DEFAULT_SETTINGS.staleHours),
     landingIdleMinutes: positiveNumber(s.landingIdleMinutes, DEFAULT_SETTINGS.landingIdleMinutes),
     searchIdleMinutes: positiveNumber(s.searchIdleMinutes, DEFAULT_SETTINGS.searchIdleMinutes),
+    historySkipPages: Array.isArray(s.historySkipPages)
+      ? s.historySkipPages.filter((p) => typeof p === 'string' && p.trim())
+      : DEFAULT_HISTORY_SKIP_PAGES,
     landingPages: Array.isArray(s.landingPages)
       ? s.landingPages.filter((p) => typeof p === 'string' && p.trim())
       : DEFAULT_LANDING_PAGES,

@@ -56,3 +56,8 @@ test('mergeSettings: keep-one list defaults to Gmail and Google Calendar', () =>
   assert.deepEqual(mergeSettings({ keepOneHosts: [] }).keepOneHosts, []);
   assert.deepEqual(mergeSettings({ keepOneHosts: ['outlook.office.com', 3] }).keepOneHosts, ['outlook.office.com']);
 });
+
+test('mergeSettings: history skip list defaults to blank/new tabs and the Google home page', () => {
+  assert.deepEqual(mergeSettings({}).historySkipPages, ['chrome://newtab', 'chrome://new-tab-page', 'about:blank', 'google.*', 'google.*/webhp']);
+  assert.deepEqual(mergeSettings({ historySkipPages: [] }).historySkipPages, []);
+});

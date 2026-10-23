@@ -16,7 +16,7 @@ Requires Chrome 121 or later.
 
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, "Let this site keep playing" and "Always keep one tab of this site open" toggles for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
-- **Settings page**: thresholds (30 min / 24 h / 10 min / 60 min for Google search results by default), the landing-page list, logged-out site rules, the "keep one tab open" list, background-audio options and the keep-playing list.
+- **Settings page**: thresholds (30 min / 24 h / 10 min / 60 min for Google search results by default), the landing-page list, the "close without recording in history" list, logged-out site rules, the "keep one tab open" list, background-audio options and the keep-playing list.
 - On first install every open tab starts its timers at the install time, so nothing is closed for being idle straight away. Duplicates and tabs already on a sign-out page (Rule 1) are closed right away.
 
 ## Definitions
@@ -148,7 +148,7 @@ Interaction with closing rules: the "audible tabs are never closed" exemption ef
 
 ## Closed-tab history (persistent database)
 
-Every tab auto-closed by the extension is recorded in a local **IndexedDB** database (works directly in the MV3 service worker; `unlimitedStorage` permission so size is not a concern). Data never leaves the machine.
+Every tab auto-closed by the extension is recorded in a local **IndexedDB** database, except pages with no useful information (see **Not recorded** below) (works directly in the MV3 service worker; `unlimitedStorage` permission so size is not a concern). Data never leaves the machine.
 
 Each record stores:
 
@@ -166,6 +166,8 @@ Each record stores:
 | `windowId`, `groupId`, `index` | where the tab was |
 
 Indexes: `closedAt`, `domain`, `reason`, `url`.
+
+**Not recorded**: tabs on the **"Close without recording in history"** list are closed by the rules as usual but leave no history entry, because they carry no useful information. Default: `chrome://newtab`, `chrome://new-tab-page`, `about:blank`, and the Google home page (`google.*`, `google.*/webhp`). Editable in Settings, same pattern format as the landing-page list; like landing pages it matches only the page itself, so Google **search results** (`/search?q=…`) are still recorded.
 
 ### History page
 
@@ -268,7 +270,7 @@ for each group of tabs sharing a normalizedUrl (size > 1):
 
 The duplicate check also runs immediately on navigation and focus events, using the same function. Each sweep ends by rescheduling the `sweep` alarm with `nextDeadline`.
 
-`close(tab, reason)` writes the record to IndexedDB first, then calls `chrome.tabs.remove`. If removal fails, the record is deleted, so the history only contains tabs that were actually closed.
+`close(tab, reason)` writes the record to IndexedDB first (skipped for pages on the "not recorded" list), then calls `chrome.tabs.remove`. If removal fails, the record is deleted, so the history only contains tabs that were actually closed.
 
 ### Testability
 
