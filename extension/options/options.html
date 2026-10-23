@@ -22,6 +22,9 @@
     <label>Close unused new-tab, landing and sign-in pages
       <input type="number" id="landingIdleMinutes" min="1" step="1" required> minutes after last visit
     </label>
+    <label>Close Google search results (<code>google.com/search?q=…</code>)
+      <input type="number" id="searchIdleMinutes" min="1" step="1" required> minutes after last visit
+    </label>
     <label class="block">Landing pages <span class="muted">(one per line: <code>host</code>, <code>host/path</code>, <code>*.host</code>, <code>google.*</code>, or a full URL like <code>chrome://newtab</code>)</span>
       <textarea id="landingPages" rows="5" spellcheck="false"></textarea>
     </label>

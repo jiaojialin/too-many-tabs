@@ -7,6 +7,7 @@ export const REASON_LABELS = {
   duplicate: 'Duplicate',
   stale: 'Stale',
   empty: 'Unused',
+  search: 'Search',
 };
 
 export function startOfDay(ts) {

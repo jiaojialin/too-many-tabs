@@ -11,6 +11,7 @@
   --badge-duplicate: #d35400;
   --badge-stale: #607d8b;
   --badge-empty: #00897b;
+  --badge-search: #1a73e8;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -60,6 +61,7 @@ button:disabled { opacity: .5; cursor: default; }
 .badge.duplicate { background: var(--badge-duplicate); }
 .badge.stale { background: var(--badge-stale); }
 .badge.empty { background: var(--badge-empty); }
+.badge.search { background: var(--badge-search); }
 .favicon { width: 16px; height: 16px; flex: none; }
 .row {
   display: flex;

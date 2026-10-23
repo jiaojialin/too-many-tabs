@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   loggedOutMinutes: 30,
   staleHours: 24,
   landingIdleMinutes: 10,
+  searchIdleMinutes: 60,
   landingPages: DEFAULT_LANDING_PAGES,
   audioPauseEnabled: true,
   audioPauseDelaySeconds: 2,
@@ -36,6 +37,7 @@ export function mergeSettings(stored = {}) {
     loggedOutMinutes: positiveNumber(s.loggedOutMinutes, DEFAULT_SETTINGS.loggedOutMinutes),
     staleHours: positiveNumber(s.staleHours, DEFAULT_SETTINGS.staleHours),
     landingIdleMinutes: positiveNumber(s.landingIdleMinutes, DEFAULT_SETTINGS.landingIdleMinutes),
+    searchIdleMinutes: positiveNumber(s.searchIdleMinutes, DEFAULT_SETTINGS.searchIdleMinutes),
     landingPages: Array.isArray(s.landingPages)
       ? s.landingPages.filter((p) => typeof p === 'string' && p.trim())
       : DEFAULT_LANDING_PAGES,

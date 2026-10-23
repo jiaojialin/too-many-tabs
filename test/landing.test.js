@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_LANDING_PAGES, isLandingPage } from '../extension/lib/landing.js';
+import { DEFAULT_LANDING_PAGES, isGoogleSearchResults, isLandingPage } from '../extension/lib/landing.js';
 import { parsePatternList } from '../extension/lib/settings.js';
 
 const landing = (url, patterns = DEFAULT_LANDING_PAGES) => isLandingPage(url, patterns);
@@ -54,4 +54,27 @@ test('custom patterns: host, host/path, *.host and full URLs', () => {
 
 test('parsePatternList trims, lower-cases, dedupes and skips comments', () => {
   assert.deepEqual(parsePatternList('# start pages\nNYTimes.com\n\n nytimes.com \nabout:blank'), ['nytimes.com', 'about:blank']);
+});
+
+test('isGoogleSearchResults: google.com/search with a query', () => {
+  for (const url of [
+    'https://www.google.com/search?q=cats',
+    'https://www.google.com/search?q=cats&sca_esv=1&source=hp',
+    'https://www.google.com/search?sca_esv=1&q=cats',
+    'https://google.com/search?q=cats',
+  ]) {
+    assert.ok(isGoogleSearchResults(url), url);
+  }
+  for (const url of [
+    'https://www.google.com/',
+    'https://www.google.com/search?q=',
+    'https://www.google.com/maps/search/cats',
+    'https://www.google.com/searchx?q=cats',
+    'https://docs.google.com/search?q=cats',
+    'http://www.google.com/search?q=cats',
+    'https://www.bing.com/search?q=cats',
+    'not a url',
+  ]) {
+    assert.ok(!isGoogleSearchResults(url), url);
+  }
 });
