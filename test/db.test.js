@@ -149,3 +149,13 @@ test('dayPage: an emptied day falls back to the next older day, then newer; empt
   assert.equal((await history.dayPage(localDay(2026, 10, 1, 0))).day, d12, 'then newer');
   assert.equal((await history.dayPage(d21, { text: 'zzz' })).day, null);
 });
+
+test('deleteMany removes exactly the given records', async () => {
+  const keep = await history.add(record(1));
+  const a = await history.add(record(2));
+  const b = await history.add(record(3));
+  await history.deleteMany([a, b]);
+  assert.deepEqual((await history.query({ limit: Infinity })).records.map((r) => r.id), [keep]);
+  await history.deleteMany([]);
+  assert.equal((await history.query({ limit: Infinity })).records.length, 1);
+});

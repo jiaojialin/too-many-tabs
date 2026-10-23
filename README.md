@@ -183,7 +183,7 @@ A full extension page (opened from the popup's "History" button) for reviewing a
 - **Other filters**: free-text search (title/URL), domain, and reason; filters combine with the date range. Changing a filter jumps to the most recent day with matching records.
 - **Paging**: by day, backed by the `closedAt` index (each day and each "next day with records" lookup is a range query), so large histories stay fast. Exports still cover every matching record, not just the day shown.
 - One click reopens a tab (and the popup shows the most recent closures with a quick "reopen").
-- Records can be deleted individually or cleared all at once. Deleting the last record of a day moves to the next older (or newer) day.
+- Records can be deleted individually or cleared all at once. **Clear all** is guarded: it opens a dialog that says how many entries will be deleted and requires typing **`confirm to clear all history`** exactly (surrounding spaces ignored) before its button is enabled. On confirm it first downloads a JSON backup of every entry (`too-many-tabs-history-backup-<date>-<time>.json`), then deletes exactly those entries in one transaction; if the backup or the delete fails, nothing is deleted. It always clears the whole history on this computer, regardless of filters. Deleting the last record of a day moves to the next older (or newer) day.
 
 ### Export
 

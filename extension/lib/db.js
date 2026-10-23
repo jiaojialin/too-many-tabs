@@ -61,6 +61,18 @@ export function createHistoryDb(idb = globalThis.indexedDB, keyRange = globalThi
       await promisify((await store('readwrite')).clear());
     },
 
+    // Deletes the given records in one transaction (all or nothing).
+    async deleteMany(ids) {
+      const tx = (await db()).transaction(STORE, 'readwrite');
+      const objects = tx.objectStore(STORE);
+      for (const id of ids) objects.delete(id);
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    },
+
     // Pages through records by close time. `after` is the `next` cursor from
     // the previous page. Pass limit: Infinity to fetch everything.
     async query({ from = null, to = null, text = '', domain = '', reason = '', order = 'desc', limit = 50, after = null } = {}) {

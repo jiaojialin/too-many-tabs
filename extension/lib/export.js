@@ -57,10 +57,20 @@ export function toSqlite(SQL, records) {
   }
 }
 
-export function exportFilename(extension, now = new Date()) {
+// Clearing the whole history requires typing this phrase (surrounding
+// spaces ignored).
+export const CLEAR_PHRASE = 'confirm to clear all history';
+
+export function isClearConfirmed(text) {
+  return (text ?? '').trim() === CLEAR_PHRASE;
+}
+
+// `kind` names the file: "history" for exports, "history-backup" for the
+// backup taken before clearing.
+export function exportFilename(extension, now = new Date(), kind = 'history') {
   const pad = (n) => String(n).padStart(2, '0');
   const stamp =
     `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
     `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `too-many-tabs-history-${stamp}.${extension}`;
+  return `too-many-tabs-${kind}-${stamp}.${extension}`;
 }
