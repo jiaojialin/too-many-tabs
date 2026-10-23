@@ -37,12 +37,6 @@
           <option value="search">Search</option>
         </select>
       </label>
-      <label>Sort
-        <select id="sort">
-          <option value="site">By site</option>
-          <option value="time">Close time (latest first)</option>
-        </select>
-      </label>
     </form>
     <div class="actions">
       <span class="muted">Export matching records:</span>
@@ -61,6 +55,11 @@
       </div>
       <button type="button" id="older">Older ›</button>
     </nav>
+    <div id="sort-bar" role="group" aria-label="Sort" hidden>
+      <span class="muted">Sort:</span>
+      <button type="button" data-sort="site" aria-pressed="true">By site</button>
+      <button type="button" data-sort="time" aria-pressed="false">Latest first</button>
+    </div>
     <div id="timeline"></div>
     <p id="empty" class="muted" hidden>No closed tabs match these filters.</p>
   </main>
