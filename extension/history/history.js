@@ -1,13 +1,12 @@
 import { createHistoryDb } from '../lib/db.js';
 import { exportFilename, toCsv, toJson, toSqlite } from '../lib/export.js';
-import { dayCountText, dayLabel, formatClock, formatFull, isDayClipped, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
+import { dayCountText, dayLabel, formatClock, formatFull, groupBySite, isDayClipped, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
 import { el, favicon, isLinkable, reasonBadge, reopen } from '../ui/render.js';
 
 const history = createHistoryDb();
 const $ = (id) => document.getElementById(id);
 
 // The page shows one day at a time (README "History page").
-let order = 'desc';
 let generation = 0;
 let currentDay = null;
 let olderDay = null;
@@ -24,7 +23,6 @@ function filters() {
     text: $('text').value.trim(),
     domain: $('domain').value,
     reason: $('reason').value,
-    order,
   };
 }
 
@@ -101,7 +99,16 @@ function render(records, f) {
   $('day-label').textContent = currentDay === null ? '' : dayLabel(currentDay, now);
   const filtered = currentDay !== null && (Boolean(f.text || f.domain || f.reason) || isDayClipped(f, currentDay));
   $('day-count').textContent = currentDay === null ? '' : dayCountText(records.length, currentDay, now, { filtered });
-  $('timeline').replaceChildren(...records.map(row));
+  $('timeline').replaceChildren(
+    ...groupBySite(records).map(({ site, records: list }) =>
+      el(
+        'section',
+        { class: 'site-group' },
+        el('h3', {}, site, el('span', { class: 'muted' }, ` · ${list.length}`)),
+        ...list.map(row),
+      ),
+    ),
+  );
 }
 
 // Filters changed: jump to the most recent day that matches them.
@@ -153,11 +160,6 @@ let searchTimer = null;
 $('text').addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(reset, 200);
-});
-$('order').addEventListener('click', () => {
-  order = order === 'desc' ? 'asc' : 'desc';
-  $('order').textContent = order === 'desc' ? 'Newest first' : 'Oldest first';
-  show(currentDay); // re-sorts the day shown; stays on it
 });
 $('filters').addEventListener('submit', (event) => event.preventDefault());
 

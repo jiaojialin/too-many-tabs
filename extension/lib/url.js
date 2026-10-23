@@ -43,6 +43,8 @@ export function hostOf(raw) {
 const SECOND_LEVEL = new Set(['co', 'com', 'net', 'org', 'gov', 'ac', 'edu']);
 
 export function siteOf(host) {
+  // IP addresses (IPv6 hosts come bracketed) have no registrable domain.
+  if (/^\d+(?:\.\d+){3}$/.test(host) || host.startsWith('[')) return host;
   const labels = host.toLowerCase().split('.').filter(Boolean);
   if (labels.length <= 2) return labels.join('.');
   const tld = labels[labels.length - 1];

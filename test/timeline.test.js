@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dayCountText, dayLabel, endOfDay, formatClock, isDayClipped, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
+import { dayCountText, dayLabel, endOfDay, formatClock, groupBySite, isDayClipped, siteGroup, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
 
 const at = (y, m, d, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 const NOW = at(2026, 10, 21, 15, 0);
@@ -55,4 +55,29 @@ test('isDayClipped: a range that cuts off part of the day', () => {
   assert.equal(isDayClipped({ from: day - 1, to: null }, day), false);
   assert.equal(isDayClipped({ from: day + 1, to: null }, day), true);
   assert.equal(isDayClipped({ from: null, to: endOfDay(day) - 1 }, day), true);
+});
+
+test('siteGroup: registrable domain, or the scheme for pages without a host', () => {
+  assert.equal(siteGroup('https://www.google.com/search?q=x'), 'google.com');
+  assert.equal(siteGroup('https://myhealth.stanfordhealthcare.org/app'), 'stanfordhealthcare.org');
+  assert.equal(siteGroup('https://www.bbc.co.uk/news'), 'bbc.co.uk');
+  assert.equal(siteGroup('https://localhost:47990/pin'), 'localhost');
+  assert.equal(siteGroup('http://192.168.1.5/admin'), '192.168.1.5');
+  assert.equal(siteGroup('about:blank'), 'about:');
+  assert.equal(siteGroup('chrome://newtab/'), 'newtab');
+});
+
+test('groupBySite: groups A to Z, most recently closed first within a group', () => {
+  const records = [
+    { id: 1, url: 'https://www.google.com/search?q=a', closedAt: 100 },
+    { id: 2, url: 'https://myhealth.stanfordhealthcare.org/', closedAt: 300 },
+    { id: 3, url: 'https://google.com/search?q=b', closedAt: 200 },
+    { id: 4, url: 'https://www.stanfordhealthcare.org/doctors', closedAt: 50 },
+    { id: 5, url: 'https://amazon.com/dp/1', closedAt: 10 },
+    { id: 6, url: 'https://www.google.com/search?q=c', closedAt: 200 },
+  ];
+  assert.deepEqual(
+    groupBySite(records).map((g) => [g.site, g.records.map((r) => r.id)]),
+    [['amazon.com', [5]], ['google.com', [6, 3, 1]], ['stanfordhealthcare.org', [2, 4]]],
+  );
 });
