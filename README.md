@@ -204,6 +204,7 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 | `tabs.onActivated`, `windows.onFocusChanged` | update last-visited for the tab being left and the tab being entered; start/cancel audio-pause timers; re-run the duplicate check (the active window changed). The active window is read from Chrome on every pass, so it never lags behind a focus change. |
 | `tabs.onUpdated` (url, title, status) | once the page has finished loading: recompute normalized URL, run logged-out detection on the URL/title transition, and run the duplicate check (tabs still loading are left out of duplicate groups) |
 | `tabs.onUpdated` (audible) | start the 2 s audio-pause timer if the tab isn't selected |
+| `windows.onBoundsChanged` | re-check after a window enters or leaves full screen (a tab playing full screen is exempt) |
 | `tabs.onCreated` / `onRemoved` / `onReplaced` | add / drop / re-key tab state (a replaced tab keeps its last-visited time and flags under its new id) |
 | `runtime.onStartup` | re-match restored tabs to stored state by URL + position |
 

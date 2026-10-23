@@ -20,6 +20,8 @@ chrome.tabs.onAttached.addListener(refresh);
 chrome.tabs.onDetached.addListener(refresh);
 chrome.tabs.onUpdated.addListener(controller.onTabUpdated);
 chrome.windows.onFocusChanged.addListener(controller.onFocusChanged);
+// Entering or leaving full screen changes which tabs are protected.
+chrome.windows.onBoundsChanged.addListener(refresh);
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && SETTINGS_KEY in changes) refresh();

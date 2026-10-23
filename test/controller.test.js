@@ -225,6 +225,26 @@ test('a tab playing full screen in another window is not closed', async () => {
   assert.deepEqual(env.chrome._state.removed, [3, 2], 'protection ends when it leaves full screen');
 });
 
+test('locked-fullscreen counts as full screen; a windows API failure protects nothing extra', async () => {
+  const tabs = () => [
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 2, index: 0, active: true, url: 'https://video.test/' },
+  ];
+  const locked = setup(tabs());
+  locked.chrome._state.windows = [{ id: 1, state: 'normal' }, { id: 2, state: 'locked-fullscreen' }];
+  await locked.controller.request();
+  locked.advance(48 * HOUR);
+  await locked.controller.request();
+  assert.deepEqual(locked.chrome._state.removed, []);
+
+  const failing = setup(tabs());
+  failing.chrome._state.failGetAll = true;
+  await failing.controller.request();
+  failing.advance(48 * HOUR);
+  await failing.controller.request();
+  assert.deepEqual(failing.chrome._state.removed, [2]);
+});
+
 test('only reacts to relevant tab updates', async () => {
   const env = setup(baseTabs());
   assert.equal(env.controller.onTabUpdated(1, { favIconUrl: 'x' }), undefined);
