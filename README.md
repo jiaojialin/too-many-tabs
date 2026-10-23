@@ -51,6 +51,7 @@ The extension never auto-closes:
 - audible tabs (playing sound),
 - the active tab: the tab you are looking at (the selected tab of the active window). Other tabs in the active window are **not** exempt,
 - the one kept tab of each "keep one tab open" site (Rule 6), e.g. your Gmail tab,
+- a tab playing full screen: the tab showing in a window that is in full-screen mode (a full-screen video puts its window in full-screen mode, e.g. a movie on a second monitor while you work in another window). Checked on every pass; once it leaves full screen the normal rules apply again. Background audio pausing is unchanged,
 - any incognito tab (incognito is ignored entirely).
 
 ## Rules
@@ -203,6 +204,7 @@ The extension combines **events** (react immediately to what Chrome reports) wit
 | `tabs.onActivated`, `windows.onFocusChanged` | update last-visited for the tab being left and the tab being entered; start/cancel audio-pause timers; re-run the duplicate check (the active window changed). The active window is read from Chrome on every pass, so it never lags behind a focus change. |
 | `tabs.onUpdated` (url, title, status) | once the page has finished loading: recompute normalized URL, run logged-out detection on the URL/title transition, and run the duplicate check (tabs still loading are left out of duplicate groups) |
 | `tabs.onUpdated` (audible) | start the 2 s audio-pause timer if the tab isn't selected |
+| `windows.onBoundsChanged` | re-check after a window enters or leaves full screen (a tab playing full screen is exempt) |
 | `tabs.onCreated` / `onRemoved` / `onReplaced` | add / drop / re-key tab state (a replaced tab keeps its last-visited time and flags under its new id) |
 | `runtime.onStartup` | re-match restored tabs to stored state by URL + position |
 
@@ -245,6 +247,7 @@ exempt(tab) = tab.pinned
            or tab == activeTab
            or tab.incognito
            or tab is the most recently visited tab of a "keep one tab open" site
+           or tab is the active tab of a full-screen window
 
 for each tab:
   idle = now - lastVisitedAt(tab)

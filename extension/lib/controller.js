@@ -59,11 +59,12 @@ export function createController({ chrome, history, now = () => Date.now(), time
   }
 
   async function reconcile(ops) {
-    const [stored, storedState, session, allTabs] = await Promise.all([
+    const [stored, storedState, session, allTabs, windows] = await Promise.all([
       chrome.storage.sync.get(SETTINGS_KEY),
       chrome.storage.local.get(STATE_KEY),
       chrome.storage.session.get(SESSION_KEY),
       chrome.tabs.query({ windowType: 'normal' }),
+      chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => []),
     ]);
     const settings = mergeSettings(stored[SETTINGS_KEY]);
     const state = { ...emptyState(), ...storedState[STATE_KEY] };
@@ -112,7 +113,11 @@ export function createController({ chrome, history, now = () => Date.now(), time
     }
     state.entries = entries;
 
-    const ctx = { now: t, visitedTabId, settings };
+    // Full-screen playback (a video, or the whole window) puts the window in
+    // full-screen state; the tab showing in it is never closed.
+    const fullscreen = new Set(windows.filter((w) => /fullscreen/i.test(w.state ?? '')).map((w) => w.id));
+    const fullscreenTabIds = new Set(tabs.filter((tab) => tab.active && fullscreen.has(tab.windowId)).map((tab) => tab.id));
+    const ctx = { now: t, visitedTabId, fullscreenTabIds, settings };
     ctx.audioKeeperId = audioKeeperId(tabs, state.entries, ctx);
     await handleAudio(tabs, state.entries, ctx, ops);
 
