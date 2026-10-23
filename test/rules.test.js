@@ -213,6 +213,22 @@ test('Rule 4: sign-in pages are candidates; the visited one is kept', () => {
   assert.deepEqual(decide(tabs, entries, ctx({ visitedTabId: 1 })).map((c) => c.tab.id), [2]);
 });
 
+test('Rule 5: Google search results close 60 minutes after the last visit', () => {
+  const search = (id, props = {}) => tab(id, { url: `https://www.google.com/search?q=q${id}`, ...props });
+  const tabs = [search(1), search(2), tab(3)];
+  const entries = { 1: visitedAgo(60 * MINUTE), 2: visitedAgo(59 * MINUTE), 3: visitedAgo(2 * HOUR) };
+  assert.deepEqual(decide(tabs, entries, ctx()).map((c) => [c.tab.id, c.reason]), [[1, 'search']]);
+  assert.equal(nextDeadline([tabs[1]], entries, ctx()), NOW + MINUTE);
+  assert.deepEqual(decide([search(4)], { 4: visitedAgo(2 * HOUR) }, ctx({ visitedTabId: 4 })), [], 'the visited tab stays');
+  assert.deepEqual(decide([search(5, { status: 'loading' })], { 5: visitedAgo(2 * HOUR) }, ctx()), []);
+});
+
+test('Rule 5: honours a custom search idle time', () => {
+  const settings = { ...SETTINGS, searchIdleMinutes: 5 };
+  const tabs = [tab(1, { url: 'https://www.google.com/search?q=x' })];
+  assert.deepEqual(decide(tabs, { 1: visitedAgo(5 * MINUTE) }, ctx({ settings })).map((c) => c.reason), ['search']);
+});
+
 test('Rule 4: honours a custom landing list and idle time', () => {
   const settings = { ...SETTINGS, landingPages: ['nytimes.com'], landingIdleMinutes: 1 };
   const tabs = [tab(1, { url: 'https://www.nytimes.com/' }), tab(2, { url: 'chrome://newtab/' })];

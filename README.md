@@ -16,7 +16,7 @@ Requires Chrome 121 or later.
 
 - **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
-- **Settings page**: thresholds (30 min / 24 h / 10 min by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
+- **Settings page**: thresholds (30 min / 24 h / 10 min / 60 min for Google search results by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
 - On first install every open tab starts its timers at the install time, so nothing is closed for being idle straight away. Duplicates and tabs already on a sign-out page (Rule 1) are closed right away.
 
 ## Definitions
@@ -110,6 +110,15 @@ Close tabs that are still on an empty, landing or sign-in page **10 minutes afte
 - Tabs still loading are never closed by this rule.
 - History reason: `empty` (shown as **Unused**), or `logged-out` for a sign-in page reached by a detected logout.
 
+### Rule 5: Google search results
+
+Google search results tabs serve an immediate need, so they have their own, shorter time to live: close them **60 minutes after they were last visited** (configurable separately in Settings), whether or not they are duplicates.
+
+- **Search results tab**: an `https://www.google.com/search?…` (or `https://google.com/search?…`) page with a non-empty `q` parameter, e.g. `https://www.google.com/search?q=cats`. The Google home page without a search is a landing page (Rule 4); other Google services (Maps, Docs, ...) and other search engines are not covered.
+- "Inactive" means not visited: switching to the tab resets the timer, and the tab you are looking at is never closed. Pinned, audible and incognito tabs are kept, as everywhere.
+- Duplicate search results (same query) still close right away under Rule 2.
+- History reason: `search` (shown as **Search**).
+
 ## Background audio pausing
 
 When the user switches to a **different tab in Chrome** while a non-selected tab is playing sound, and **another tab is playing too**, the extension pauses the extra playback so only one tab makes sound.
@@ -141,7 +150,7 @@ Each record stores:
 | `title` | tab title |
 | `domain` | host name |
 | `favIconUrl` | favicon URL, if any |
-| `reason` | `logged-out` \| `duplicate` \| `stale` \| `empty` |
+| `reason` | `logged-out` \| `duplicate` \| `stale` \| `empty` \| `search` |
 | `closedAt` | timestamp when closed |
 | `lastVisitedAt` | timestamp the tab was last visited |
 | `windowId`, `groupId`, `index` | where the tab was |
@@ -195,6 +204,7 @@ Instead of polling on a fixed interval, the extension schedules the next sweep f
 - After every sweep, and after any event that changes state (a visit, a logout detected or cleared, a tab created or removed, a settings change), compute `nextDeadline(tabs, state, settings, now)`. This is the earliest time any non-exempt tab reaches a closing threshold:
   - other logged-out tab (detected by title or site rule): `lastVisitedAt + 30 min` (a logged-out tab on a sign-out page is closed in the same pass that detects it),
   - landing-page or sign-in tab: `lastVisitedAt + 10 min`,
+  - Google search results tab: `lastVisitedAt + 60 min`,
   - any tab: `lastVisitedAt + 24 h`.
 - Set a single `chrome.alarms` alarm (`sweep`) for that time, replacing the previous one. Chrome enforces a 30-second minimum delay, so deadlines in the past or less than 30 seconds away are swept immediately instead.
 - When there is no deadline (nothing can become closable), no `sweep` alarm is set.
@@ -230,6 +240,8 @@ for each tab:
                                               -> close(tab, loggedOutSince(tab) ? "logged-out" : "empty")
   else if loggedOutSince(tab) and (isSignedOutPage(tab) or idle >= 30 min)
                                               -> close(tab, "logged-out")
+  else if isGoogleSearchResults(tab) and idle >= 60 min
+                                              -> close(tab, "search")
   else if idle >= 24 h                        -> close(tab, "stale")
 
 for each group of tabs sharing a normalizedUrl (size > 1):

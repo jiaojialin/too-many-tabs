@@ -4,7 +4,7 @@
 // mutedByUs, normalizedUrl, ... }). `ctx` is { now, visitedTabId, settings };
 // the visited tab is the selected tab of the active window.
 
-import { isLandingPage } from './landing.js';
+import { isGoogleSearchResults, isLandingPage } from './landing.js';
 import { isSignInPage, isSignedOutPage } from './logout.js';
 import { isWebUrl, normalizeUrl } from './url.js';
 
@@ -40,7 +40,14 @@ function thresholds(settings) {
     loggedOut: settings.loggedOutMinutes * MINUTE,
     stale: settings.staleHours * HOUR,
     landing: settings.landingIdleMinutes * MINUTE,
+    search: settings.searchIdleMinutes * MINUTE,
   };
+}
+
+// Rule 5: Google search results serve an immediate need, so they get their
+// own, shorter idle time.
+function isSearchCandidate(tab) {
+  return tab.status !== 'loading' && isGoogleSearchResults(tab.url ?? '');
 }
 
 // The reason a non-exempt tab is due for closing, or null. A logged-out tab
@@ -52,6 +59,7 @@ export function dueReason(tab, entry, ctx) {
   if (entry?.loggedOutSince && tab.status !== 'loading') {
     if (isSignedOutPage(tab) || idle >= limit.loggedOut) return 'logged-out';
   }
+  if (isSearchCandidate(tab) && idle >= limit.search) return 'search';
   if (idle >= limit.stale) return 'stale';
   return null;
 }
@@ -143,6 +151,7 @@ export function nextDeadline(tabs, entries, ctx) {
     if (isExempt(tab, entry, ctx)) continue;
     const visited = lastVisitedAt(tab, entry, ctx);
     let due = visited + limit.stale;
+    if (isSearchCandidate(tab)) due = Math.min(due, visited + limit.search);
     if (entry?.loggedOutSince) {
       const signedOut = tab.status !== 'loading' && isSignedOutPage(tab);
       due = Math.min(due, signedOut ? ctx.now : visited + limit.loggedOut);

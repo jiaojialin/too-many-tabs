@@ -44,3 +44,9 @@ test('mergeSettings drops the removed tab limit', () => {
 test('mergeSettings caps the audio pause delay', () => {
   assert.equal(mergeSettings({ audioPauseDelaySeconds: 120 }).audioPauseDelaySeconds, 25);
 });
+
+test('mergeSettings: search results idle time defaults to 60 minutes', () => {
+  assert.equal(mergeSettings({}).searchIdleMinutes, 60);
+  assert.equal(mergeSettings({ searchIdleMinutes: 15 }).searchIdleMinutes, 15);
+  assert.equal(mergeSettings({ searchIdleMinutes: 0 }).searchIdleMinutes, 60);
+});

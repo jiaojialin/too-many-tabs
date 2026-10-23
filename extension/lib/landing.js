@@ -61,3 +61,20 @@ export function isLandingPage(raw, patterns) {
   if (/(?:^#|&)q=/.test(url.hash)) return false;
   return patterns.some((pattern) => matchesLandingPattern(url, pattern));
 }
+
+// A Google search results page, e.g. https://www.google.com/search?q=cats
+// (Rule 5). The www prefix is optional; the query must not be empty.
+export function isGoogleSearchResults(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === 'https:' &&
+    /^(?:www\.)?google\.com$/.test(url.hostname) &&
+    url.pathname === '/search' &&
+    Boolean(url.searchParams.get('q')?.trim())
+  );
+}
