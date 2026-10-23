@@ -100,15 +100,23 @@ function render(records, f) {
   const filtered = currentDay !== null && (Boolean(f.text || f.domain || f.reason) || isDayClipped(f, currentDay));
   $('day-count').textContent = currentDay === null ? '' : dayCountText(records.length, currentDay, now, { filtered });
   $('timeline').replaceChildren(
-    ...groupBySite(records).map(({ site, records: list }) =>
+    ...groupBySite(records).map(({ site, records: list, subgroups }) =>
       el(
         'section',
         { class: 'site-group' },
-        el('h3', {}, site, el('span', { class: 'muted' }, ` · ${list.length}`)),
-        ...list.map(row),
+        groupHeading('h3', site, list.length),
+        ...(subgroups
+          ? subgroups.map(({ name, records: items }) =>
+              el('section', { class: 'subgroup' }, groupHeading('h4', name, items.length), ...items.map(row)),
+            )
+          : list.map(row)),
       ),
     ),
   );
+}
+
+function groupHeading(tag, name, count) {
+  return el(tag, {}, name, el('span', { class: 'muted' }, ` · ${count}`));
 }
 
 // Filters changed: jump to the most recent day that matches them.

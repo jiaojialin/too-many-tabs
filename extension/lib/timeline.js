@@ -75,19 +75,66 @@ export function siteGroup(url) {
   }
 }
 
-// Groups a day's records by site: groups sorted by name (A to Z), records
-// within a group most recently closed first.
-export function groupBySite(records) {
+// Friendly names for well-known products, checked in order: [host, path
+// prefix or null, name]. Hosts are compared without "www.".
+const KNOWN_PRODUCTS = [
+  ['google.com', '/search', 'Google Search'],
+  ['google.com', '/maps', 'Google Maps'],
+  ['docs.google.com', '/document', 'Google Docs'],
+  ['docs.google.com', '/spreadsheets', 'Google Sheets'],
+  ['docs.google.com', '/presentation', 'Google Slides'],
+  ['docs.google.com', '/forms', 'Google Forms'],
+  ['docs.google.com', null, 'Google Docs'],
+  ['mail.google.com', null, 'Gmail'],
+  ['calendar.google.com', null, 'Google Calendar'],
+  ['drive.google.com', null, 'Google Drive'],
+  ['meet.google.com', null, 'Google Meet'],
+  ['photos.google.com', null, 'Google Photos'],
+  ['maps.google.com', null, 'Google Maps'],
+];
+
+// The subgroup a closed tab is listed under within its site group: a known
+// product name (e.g. "Gmail", "Google Search"), otherwise its host without
+// "www." (e.g. "myhealth.stanfordhealthcare.org").
+export function subgroupOf(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (!parsed.hostname) return parsed.protocol;
+  const host = parsed.hostname.replace(/^www\./, '');
+  const path = parsed.pathname;
+  for (const [knownHost, prefix, name] of KNOWN_PRODUCTS) {
+    if (host !== knownHost) continue;
+    if (prefix === null || path === prefix || path.startsWith(`${prefix}/`)) return name;
+  }
+  return host;
+}
+
+const newestFirst = (a, b) => b.closedAt - a.closedAt || (b.id ?? 0) - (a.id ?? 0);
+const byName = ([a], [b]) => a.localeCompare(b);
+
+function groupBy(records, keyOf) {
   const groups = new Map();
   for (const record of records) {
-    const site = siteGroup(record.url ?? '');
-    if (!groups.has(site)) groups.set(site, []);
-    groups.get(site).push(record);
+    const key = keyOf(record.url ?? '');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(record);
   }
-  const newestFirst = (a, b) => b.closedAt - a.closedAt || (b.id ?? 0) - (a.id ?? 0);
-  return [...groups]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([site, list]) => ({ site, records: list.sort(newestFirst) }));
+  return [...groups].sort(byName);
+}
+
+// Groups a day's records by site, and each site by product/host when it has
+// more than one (two levels at most): groups and subgroups sorted by name
+// (A to Z), records most recently closed first. `subgroups` is null for a
+// site whose records all fall in one subgroup.
+export function groupBySite(records) {
+  return groupBy(records, siteGroup).map(([site, list]) => {
+    const subgroups = groupBy(list, subgroupOf).map(([name, items]) => ({ name, records: items.sort(newestFirst) }));
+    return { site, records: list.sort(newestFirst), subgroups: subgroups.length > 1 ? subgroups : null };
+  });
 }
 
 export const PRESETS = ['hour', 'today', '7d', '30d', 'all'];
