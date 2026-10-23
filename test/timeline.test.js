@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dayCountText, dayLabel, endOfDay, formatClock, groupBySite, isDayClipped, siteGroup, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
+import { dayCountText, dayLabel, endOfDay, formatClock, groupBySite, isDayClipped, siteGroup, subgroupOf, narrowRange, parseLocalDateTime, rangeForPreset, startOfDay } from '../extension/lib/timeline.js';
 
 const at = (y, m, d, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 const NOW = at(2026, 10, 21, 15, 0);
@@ -80,4 +80,37 @@ test('groupBySite: groups A to Z, most recently closed first within a group', ()
     groupBySite(records).map((g) => [g.site, g.records.map((r) => r.id)]),
     [['amazon.com', [5]], ['google.com', [6, 3, 1]], ['stanfordhealthcare.org', [2, 4]]],
   );
+});
+
+test('subgroupOf: known products by host and path, otherwise the host without www', () => {
+  assert.equal(subgroupOf('https://www.google.com/search?q=x'), 'Google Search');
+  assert.equal(subgroupOf('https://google.com/maps/place/x'), 'Google Maps');
+  assert.equal(subgroupOf('https://www.google.com/'), 'google.com');
+  assert.equal(subgroupOf('https://mail.google.com/mail/u/0/#inbox'), 'Gmail');
+  assert.equal(subgroupOf('https://calendar.google.com/calendar/r'), 'Google Calendar');
+  assert.equal(subgroupOf('https://docs.google.com/document/d/1/edit'), 'Google Docs');
+  assert.equal(subgroupOf('https://docs.google.com/spreadsheets/d/1/edit'), 'Google Sheets');
+  assert.equal(subgroupOf('https://docs.google.com/searchy'), 'Google Docs');
+  assert.equal(subgroupOf('https://www.google.com/searchx'), 'google.com', 'whole path segments only');
+  assert.equal(subgroupOf('https://myhealth.stanfordhealthcare.org/app'), 'myhealth.stanfordhealthcare.org');
+  assert.equal(subgroupOf('https://www.stanfordhealthcare.org/doctors'), 'stanfordhealthcare.org');
+  assert.equal(subgroupOf('about:blank'), 'about:');
+});
+
+test('groupBySite: subgroups only when a site has more than one, A to Z, newest first', () => {
+  const records = [
+    { id: 1, url: 'https://www.google.com/search?q=a', closedAt: 100 },
+    { id: 2, url: 'https://calendar.google.com/calendar/r', closedAt: 300 },
+    { id: 3, url: 'https://www.google.com/search?q=b', closedAt: 200 },
+    { id: 4, url: 'https://mail.google.com/mail/u/0/', closedAt: 50 },
+    { id: 5, url: 'https://www.amazon.com/dp/1', closedAt: 10 },
+    { id: 6, url: 'https://amazon.com/gp/2', closedAt: 20 },
+  ];
+  const groups = groupBySite(records);
+  assert.deepEqual(groups.map((g) => [g.site, g.subgroups && g.subgroups.map((s) => [s.name, s.records.map((r) => r.id)])]), [
+    ['amazon.com', null],
+    ['google.com', [['Gmail', [4]], ['Google Calendar', [2]], ['Google Search', [3, 1]]]],
+  ]);
+  assert.deepEqual(groups[0].records.map((r) => r.id), [6, 5]);
+  assert.deepEqual(groups[1].records.map((r) => r.id), [2, 3, 1, 4], 'the site list stays newest first');
 });
