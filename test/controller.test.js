@@ -707,5 +707,32 @@ test('Rule 4: an unused new tab left behind in the active window is closed after
   env.advance(10 * MINUTE);
   await env.controller.request();
   assert.deepEqual(env.chrome._state.removed, [1]);
-  assert.equal(env.history.records[0].reason, 'empty');
+  assert.deepEqual(env.history.records, [], 'a blank new tab leaves no history entry');
+});
+
+test('pages on the history skip list close without an entry; others are recorded', async () => {
+  const env = setup([
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'https://www.google.com/', title: 'Google' },
+    { id: 3, windowId: 1, index: 2, active: false, url: 'about:blank' },
+    { id: 4, windowId: 1, index: 3, active: false, url: 'https://www.bing.com/', title: 'Bing' },
+    { id: 5, windowId: 1, index: 4, active: false, url: 'https://www.google.com/search?q=cats', title: 'cats' },
+  ]);
+  await env.controller.request();
+  env.advance(HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed.sort(), [2, 3, 4, 5]);
+  assert.deepEqual(env.history.records.map((r) => r.url).sort(), ['https://www.bing.com/', 'https://www.google.com/search?q=cats']);
+});
+
+test('an empty history skip list records every closed tab', async () => {
+  const env = setup([
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'about:blank' },
+  ]);
+  await env.chrome.storage.sync.set({ [SETTINGS_KEY]: { historySkipPages: [] } });
+  await env.controller.request();
+  env.advance(HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.history.records.map((r) => [r.url, r.reason]), [['about:blank', 'empty']]);
 });

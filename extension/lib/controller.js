@@ -4,6 +4,7 @@
 
 import { audioKeeperId, isKeepPlaying, pauseMediaInPage, resumeMediaInPage, shouldPause, shouldResume } from './audio.js';
 import { recordFromTab } from './db.js';
+import { isLandingPage } from './landing.js';
 import { decide, lastVisitedAt, nextDeadline } from './rules.js';
 import { SETTINGS_KEY, mergeSettings } from './settings.js';
 import { STATE_KEY, emptyState, newEntry, refreshEntry, rematchEntries, syncAudioFlags } from './tabState.js';
@@ -150,6 +151,17 @@ export function createController({ chrome, history, now = () => Date.now(), time
   // Writes the history record first; if the tab can't be removed, the record
   // is deleted again so history only lists tabs that were really closed.
   async function closeTab(tab, reason, entry, ctx) {
+    // Pages with nothing worth keeping (blank tabs, the Google home page...)
+    // are closed without a history entry.
+    if (isLandingPage(tab.url ?? '', ctx.settings.historySkipPages)) {
+      try {
+        await chrome.tabs.remove(tab.id);
+        return true;
+      } catch (error) {
+        log.warn('Too Many Tabs: could not close tab', tab.id, error);
+        return false;
+      }
+    }
     const record = recordFromTab(tab, {
       reason,
       closedAt: ctx.now,

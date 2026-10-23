@@ -19,6 +19,7 @@ function fill(settings) {
   $('keepOneHosts').value = settings.keepOneHosts.join('\n');
   $('siteRules').value = formatSiteRules(settings.siteRules);
   $('landingPages').value = settings.landingPages.join('\n');
+  $('historySkipPages').value = settings.historySkipPages.join('\n');
 }
 
 function showStatus(message, isError = false) {
@@ -45,6 +46,7 @@ $('form').addEventListener('submit', async (event) => {
     keepOneHosts: parseHostList($('keepOneHosts').value),
     siteRules: rules,
     landingPages: parsePatternList($('landingPages').value),
+    historySkipPages: parsePatternList($('historySkipPages').value),
   });
   await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
   fill(settings);
