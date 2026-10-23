@@ -198,6 +198,17 @@ test('a restart does not make the selected tab beat a newer background copy', as
   assert.equal(env.chrome.storage.local.data[STATE_KEY].entries[1].enteredAt, env.now - HOUR);
 });
 
+test('a single Gmail tab is kept open for days without a visit', async () => {
+  const env = setup([
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 1, index: 1, active: false, url: 'https://mail.google.com/mail/u/0/#inbox', title: 'Inbox - Gmail' },
+  ]);
+  await env.controller.request();
+  env.advance(72 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, []);
+});
+
 test('only reacts to relevant tab updates', async () => {
   const env = setup(baseTabs());
   assert.equal(env.controller.onTabUpdated(1, { favIconUrl: 'x' }), undefined);

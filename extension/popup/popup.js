@@ -2,7 +2,7 @@ import { createHistoryDb } from '../lib/db.js';
 import { isKeepPlaying } from '../lib/audio.js';
 import { SETTINGS_KEY, mergeSettings, toggleHost } from '../lib/settings.js';
 import { dayLabel, formatClock, formatFull } from '../lib/timeline.js';
-import { hostOf } from '../lib/url.js';
+import { hostMatches, hostOf } from '../lib/url.js';
 import { el, favicon, reasonBadge, reopen } from '../ui/render.js';
 
 const RECENT_COUNT = 5;
@@ -24,6 +24,14 @@ async function renderKeepPlaying() {
     const latest = await loadSettings();
     const keepPlayingHosts = toggleHost(latest.keepPlayingHosts, host, checkbox.checked);
     await chrome.storage.sync.set({ [SETTINGS_KEY]: { ...latest, keepPlayingHosts } });
+  });
+  const keepOne = document.getElementById('keep-one');
+  document.getElementById('site-host-2').textContent = host;
+  keepOne.checked = settings.keepOneHosts.some((pattern) => hostMatches(host, pattern));
+  keepOne.addEventListener('change', async () => {
+    const latest = await loadSettings();
+    const keepOneHosts = toggleHost(latest.keepOneHosts, host, keepOne.checked);
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: { ...latest, keepOneHosts } });
   });
   document.getElementById('site').hidden = false;
 }
