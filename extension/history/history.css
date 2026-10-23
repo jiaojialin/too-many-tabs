@@ -19,3 +19,9 @@ header { position: sticky; top: 0; background: var(--bg); padding-bottom: 8px; z
   body { padding: 12px 16px; }
   .row .domain { display: none; }
 }
+dialog { max-width: 480px; width: calc(100% - 32px); background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+dialog h2 { margin-top: 0; font-size: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
+dialog input { width: 100%; margin: 6px 0; }
+dialog .error { color: var(--danger); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }

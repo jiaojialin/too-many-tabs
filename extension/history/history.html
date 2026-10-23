@@ -63,6 +63,20 @@
     <div id="timeline"></div>
     <p id="empty" class="muted" hidden>No closed tabs match these filters.</p>
   </main>
+  <dialog id="clear-dialog" aria-labelledby="clear-title">
+    <form id="clear-form">
+      <h2 id="clear-title">Clear all history?</h2>
+      <p id="clear-summary"></p>
+      <p>A JSON backup of every entry is downloaded first. Then every entry is deleted from this computer, whatever filters are set. This can't be undone.</p>
+      <label class="block" for="clear-phrase">Type <strong id="clear-phrase-text"></strong> to continue:</label>
+      <input id="clear-phrase" autocomplete="off" spellcheck="false">
+      <p id="clear-error" class="error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" id="clear-cancel">Cancel</button>
+        <button type="submit" id="clear-confirm" class="danger" disabled>Download backup and clear</button>
+      </div>
+    </form>
+  </dialog>
   <script type="module" src="history.js"></script>
 </body>
 </html>

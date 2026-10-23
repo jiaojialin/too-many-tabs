@@ -1,5 +1,5 @@
 import { createHistoryDb } from '../lib/db.js';
-import { exportFilename, toCsv, toJson, toSqlite } from '../lib/export.js';
+import { CLEAR_PHRASE, exportFilename, isClearConfirmed, toCsv, toJson, toSqlite } from '../lib/export.js';
 import { dayCountText, dayLabel, formatClock, formatFull, groupBySite, isDayClipped, parseLocalDateTime, rangeForPreset, startOfDay } from '../lib/timeline.js';
 import { el, favicon, isLinkable, reasonBadge, reopen } from '../ui/render.js';
 
@@ -139,9 +139,9 @@ async function renderDomains() {
   select.value = domains.includes(selected) ? selected : '';
 }
 
-function download(data, type, extension) {
+function download(data, type, extension, kind = 'history') {
   const url = URL.createObjectURL(new Blob([data], { type }));
-  const link = el('a', { href: url, download: exportFilename(extension) });
+  const link = el('a', { href: url, download: exportFilename(extension, new Date(), kind) });
   document.body.append(link);
   link.click();
   link.remove();
@@ -215,11 +215,43 @@ for (const button of document.querySelectorAll('[data-export]')) {
   });
 }
 
+// Clear all: type the phrase, then a JSON backup of every entry is
+// downloaded and exactly those entries are deleted. Nothing is deleted if
+// the backup can't be made.
+$('clear-phrase-text').textContent = CLEAR_PHRASE;
 $('clear').addEventListener('click', async () => {
-  if (!confirm('Delete the entire closed-tab history? This cannot be undone.')) return;
-  await history.clear();
-  await renderDomains();
-  reset();
+  const { records } = await history.query({ limit: Infinity });
+  $('clear-summary').textContent = records.length
+    ? `${records.length} ${records.length === 1 ? 'entry' : 'entries'} will be deleted.`
+    : 'The history is already empty.';
+  $('clear-phrase').value = '';
+  $('clear-confirm').disabled = true;
+  $('clear-error').hidden = true;
+  $('clear-dialog').showModal();
+  $('clear-phrase').focus();
+});
+$('clear-phrase').addEventListener('input', () => {
+  $('clear-confirm').disabled = !isClearConfirmed($('clear-phrase').value);
+});
+$('clear-cancel').addEventListener('click', () => $('clear-dialog').close());
+$('clear-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!isClearConfirmed($('clear-phrase').value)) return;
+  $('clear-confirm').disabled = true;
+  try {
+    const { records } = await history.query({ limit: Infinity });
+    if (records.length) {
+      download(toJson(records), 'application/json', 'json', 'history-backup');
+      await history.deleteMany(records.map((record) => record.id));
+    }
+    $('clear-dialog').close();
+    await renderDomains();
+    reset();
+  } catch (error) {
+    $('clear-error').textContent = `Nothing was cleared: ${error.message}`;
+    $('clear-error').hidden = false;
+    $('clear-confirm').disabled = false;
+  }
 });
 
 $('newer').addEventListener('click', () => newerDay !== null && show(newerDay));

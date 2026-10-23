@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import initSqlJs from 'sql.js';
-import { COLUMNS, csvField, exportFilename, toCsv, toJson, toSqlite } from '../extension/lib/export.js';
+import { CLEAR_PHRASE, COLUMNS, csvField, exportFilename, isClearConfirmed, toCsv, toJson, toSqlite } from '../extension/lib/export.js';
 
 const records = [
   { id: 1, url: 'https://a.test/?q=1,2', title: 'Say "hi"', domain: 'a.test', reason: 'stale', closedAt: 100, lastVisitedAt: 50, windowId: 1, groupId: -1, index: 0 },
@@ -44,4 +44,14 @@ test('toSqlite produces a closed_tabs table with the records', async () => {
 
 test('exportFilename includes a local timestamp', () => {
   assert.equal(exportFilename('csv', new Date(2026, 9, 21, 14, 3, 9)), 'too-many-tabs-history-20261021-140309.csv');
+});
+
+test('backup file name and the clear-all phrase', () => {
+  assert.equal(exportFilename('json', new Date(2026, 9, 23, 9, 5, 1), 'history-backup'), 'too-many-tabs-history-backup-20261023-090501.json');
+  assert.equal(CLEAR_PHRASE, 'confirm to clear all history');
+  assert.ok(isClearConfirmed('confirm to clear all history'));
+  assert.ok(isClearConfirmed('  confirm to clear all history '));
+  assert.ok(!isClearConfirmed('Confirm to clear all history'));
+  assert.ok(!isClearConfirmed('comfirm to clear all history'));
+  assert.ok(!isClearConfirmed(''));
 });
