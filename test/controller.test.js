@@ -209,6 +209,22 @@ test('a single Gmail tab is kept open for days without a visit', async () => {
   assert.deepEqual(env.chrome._state.removed, []);
 });
 
+test('a tab playing full screen in another window is not closed', async () => {
+  const env = setup([
+    { id: 1, windowId: 1, index: 0, active: true, url: 'https://work.test/' },
+    { id: 2, windowId: 2, index: 0, active: true, url: 'https://video.test/watch?v=1' },
+    { id: 3, windowId: 2, index: 1, active: false, url: 'https://other.test/' },
+  ]);
+  env.chrome._state.windows = [{ id: 1, state: 'normal' }, { id: 2, state: 'fullscreen' }];
+  await env.controller.request();
+  env.advance(48 * HOUR);
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [3], 'only the front tab of the full-screen window is protected');
+  env.chrome._state.windows[1].state = 'normal';
+  await env.controller.request();
+  assert.deepEqual(env.chrome._state.removed, [3, 2], 'protection ends when it leaves full screen');
+});
+
 test('only reacts to relevant tab updates', async () => {
   const env = setup(baseTabs());
   assert.equal(env.controller.onTabUpdated(1, { favIconUrl: 'x' }), undefined);

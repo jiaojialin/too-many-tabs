@@ -51,6 +51,7 @@ The extension never auto-closes:
 - audible tabs (playing sound),
 - the active tab: the tab you are looking at (the selected tab of the active window). Other tabs in the active window are **not** exempt,
 - the one kept tab of each "keep one tab open" site (Rule 6), e.g. your Gmail tab,
+- a tab playing full screen: the tab showing in a window that is in full-screen mode (a full-screen video puts its window in full-screen mode, e.g. a movie on a second monitor while you work in another window). Checked on every pass; once it leaves full screen the normal rules apply again. Background audio pausing is unchanged,
 - any incognito tab (incognito is ignored entirely).
 
 ## Rules
@@ -245,6 +246,7 @@ exempt(tab) = tab.pinned
            or tab == activeTab
            or tab.incognito
            or tab is the most recently visited tab of a "keep one tab open" site
+           or tab is the active tab of a full-screen window
 
 for each tab:
   idle = now - lastVisitedAt(tab)

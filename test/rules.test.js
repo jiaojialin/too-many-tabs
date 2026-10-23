@@ -26,6 +26,11 @@ test('isExempt: other tabs in the active window are not protected', () => {
   assert.ok(!isExempt(tab(3, { windowId: OTHER_WINDOW, active: true }), {}, c), 'front tab of another window');
 });
 
+test('isExempt: the tab showing in a full-screen window', () => {
+  assert.ok(isExempt(tab(5), {}, ctx({ fullscreenTabIds: new Set([5]) })));
+  assert.deepEqual(decide([tab(5)], { 5: visitedAgo(48 * HOUR) }, ctx({ fullscreenTabIds: new Set([5]) })), []);
+});
+
 test('isExempt: a tab muted by the extension is not protected by being audible', () => {
   assert.ok(!isExempt(tab(1, { audible: true }), { mutedByUs: true }, ctx()));
 });

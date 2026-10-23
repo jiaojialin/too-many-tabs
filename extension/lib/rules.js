@@ -22,6 +22,7 @@ export function isExempt(tab, entry, ctx) {
       tab.pinned ||
       (tab.audible && !entry?.mutedByUs) ||
       tab.id === ctx.visitedTabId ||
+      ctx.fullscreenTabIds?.has(tab.id) ||
       ctx.keptTabIds?.has(tab.id),
   );
 }
