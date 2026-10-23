@@ -99,6 +99,11 @@ function render(records, f) {
   $('day-label').textContent = currentDay === null ? '' : dayLabel(currentDay, now);
   const filtered = currentDay !== null && (Boolean(f.text || f.domain || f.reason) || isDayClipped(f, currentDay));
   $('day-count').textContent = currentDay === null ? '' : dayCountText(records.length, currentDay, now, { filtered });
+  if ($('sort').value === 'time') {
+    // Records arrive newest first; no grouping in this view.
+    $('timeline').replaceChildren(...records.map(row));
+    return;
+  }
   $('timeline').replaceChildren(
     ...groupBySite(records).map(({ site, records: list, subgroups }) =>
       el(
@@ -164,6 +169,20 @@ $('preset').addEventListener('change', () => {
   reset();
 });
 for (const id of ['from', 'to', 'domain', 'reason']) $(id).addEventListener('change', reset);
+
+// The sort choice is a per-viewer convenience, remembered in localStorage
+// when it is available.
+const SORT_KEY = 'historySort';
+try {
+  const saved = localStorage.getItem(SORT_KEY);
+  if (saved === 'site' || saved === 'time') $('sort').value = saved;
+} catch {}
+$('sort').addEventListener('change', () => {
+  try {
+    localStorage.setItem(SORT_KEY, $('sort').value);
+  } catch {}
+  show(currentDay); // re-sorts the day shown; stays on it
+});
 let searchTimer = null;
 $('text').addEventListener('input', () => {
   clearTimeout(searchTimer);
