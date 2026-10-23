@@ -49,3 +49,9 @@ test('hostMatches matches the host and subdomains only', () => {
   assert.ok(!hostMatches('notyoutube.com', 'youtube.com'));
   assert.ok(!hostMatches('youtube.com', ''));
 });
+
+test('siteOf keeps IP addresses whole', () => {
+  assert.equal(siteOf('192.168.1.5'), '192.168.1.5');
+  assert.equal(siteOf('[::1]'), '[::1]');
+  assert.equal(sameSite('http://192.168.1.5/', 'http://10.0.1.5/'), false);
+});

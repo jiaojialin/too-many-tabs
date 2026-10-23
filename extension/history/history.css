@@ -7,6 +7,7 @@ header { position: sticky; top: 0; background: var(--bg); padding-bottom: 8px; z
 .day-heading { text-align: center; }
 .day-heading h2 { margin: 0; font-size: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
 .day-heading p { margin: 2px 0 0; }
+.site-group h3 { margin: 16px 0 4px; font-size: 14px; overflow-wrap: anywhere; }
 .row .title a { color: var(--text); text-decoration: none; }
 .row .title a:hover { text-decoration: underline; }
 .row .domain { color: var(--muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

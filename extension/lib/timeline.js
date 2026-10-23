@@ -1,4 +1,6 @@
-// Date helpers for the history timeline. All dates are local time.
+// Date and grouping helpers for the history timeline. All dates are local time.
+
+import { siteOf } from './url.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -58,6 +60,34 @@ export function dayLabel(ts, now, locale) {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+// The group a closed tab is listed under: its site (registrable domain, so
+// www.google.com and myhealth.stanfordhealthcare.org group by google.com and
+// stanfordhealthcare.org), or the scheme for pages without a host
+// ("about:", "file:").
+export function siteGroup(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname ? siteOf(parsed.hostname) : parsed.protocol;
+  } catch {
+    return url;
+  }
+}
+
+// Groups a day's records by site: groups sorted by name (A to Z), records
+// within a group most recently closed first.
+export function groupBySite(records) {
+  const groups = new Map();
+  for (const record of records) {
+    const site = siteGroup(record.url ?? '');
+    if (!groups.has(site)) groups.set(site, []);
+    groups.get(site).push(record);
+  }
+  const newestFirst = (a, b) => b.closedAt - a.closedAt || (b.id ?? 0) - (a.id ?? 0);
+  return [...groups]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([site, list]) => ({ site, records: list.sort(newestFirst) }));
 }
 
 export const PRESETS = ['hour', 'today', '7d', '30d', 'all'];
