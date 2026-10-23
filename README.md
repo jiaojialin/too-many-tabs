@@ -14,9 +14,9 @@ Requires Chrome 121 or later.
 
 ## Using it
 
-- **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, a "Let this site keep playing" toggle for the current site, and buttons for **History** and **Settings**.
+- **Popup** (toolbar icon): the most recently closed tabs with **Reopen**, "Let this site keep playing" and "Always keep one tab of this site open" toggles for the current site, and buttons for **History** and **Settings**.
 - **History page**: browse, filter, reopen, delete and export everything the extension closed (see below).
-- **Settings page**: thresholds (30 min / 24 h / 10 min / 60 min for Google search results by default), the landing-page list, logged-out site rules, background-audio options and the keep-playing list.
+- **Settings page**: thresholds (30 min / 24 h / 10 min / 60 min for Google search results by default), the landing-page list, logged-out site rules, the "keep one tab open" list, background-audio options and the keep-playing list.
 - On first install every open tab starts its timers at the install time, so nothing is closed for being idle straight away. Duplicates and tabs already on a sign-out page (Rule 1) are closed right away.
 
 ## Definitions
@@ -50,6 +50,7 @@ The extension never auto-closes:
 - pinned tabs,
 - audible tabs (playing sound),
 - the active tab: the tab you are looking at (the selected tab of the active window). Other tabs in the active window are **not** exempt,
+- the one kept tab of each "keep one tab open" site (Rule 6), e.g. your Gmail tab,
 - any incognito tab (incognito is ignored entirely).
 
 ## Rules
@@ -118,6 +119,14 @@ Google search results tabs serve an immediate need, so they have their own, shor
 - "Inactive" means not visited: switching to the tab resets the timer, and the tab you are looking at is never closed. Pinned, audible and incognito tabs are kept, as everywhere.
 - Duplicate search results (same query) still close right away under Rule 2.
 - History reason: `search` (shown as **Search**).
+
+### Rule 6: Always keep one tab open
+
+Some sites are meant to stay open all day (Gmail, Google Calendar, ...). For each site on the **"Always keep one tab open"** list, the most recently visited tab of that site is never auto-closed, by any rule, for as long as you keep it; only you close it.
+
+- Default list: `mail.google.com`, `calendar.google.com`. Editable in Settings (one host per line; a pattern also covers its subdomains), and the popup has an "Always keep one tab of this site open" toggle for the current site.
+- **Only one tab per listed site is protected**: the one visited most recently (the tab you are looking at counts as now). Extra tabs of the site follow the normal rules: exact duplicates (Rule 2) close right away, others close when stale. Tabs with a different URL on the same site (e.g. a second Gmail account, `/mail/u/1`) are not closed just for being on the same site.
+- If the site signs you out and redirects to a different host (e.g. `accounts.google.com`), that tab is no longer on the listed site and the usual sign-in/logged-out rules apply.
 
 ## Background audio pausing
 
@@ -234,6 +243,7 @@ exempt(tab) = tab.pinned
            or (tab.audible and not tab.mutedByUs)
            or tab == activeTab
            or tab.incognito
+           or tab is the most recently visited tab of a "keep one tab open" site
 
 for each tab:
   idle = now - lastVisitedAt(tab)

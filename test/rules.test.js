@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HOUR, MINUTE, decide, isLandingCandidate, isExempt, lastVisitedAt, nextDeadline, pickDuplicateWinner } from '../extension/lib/rules.js';
+import { HOUR, MINUTE, decide, keptTabIds, isLandingCandidate, isExempt, lastVisitedAt, nextDeadline, pickDuplicateWinner } from '../extension/lib/rules.js';
 import { DEFAULT_SETTINGS } from '../extension/lib/settings.js';
 
 const NOW = 1_000_000_000_000;
@@ -227,6 +227,32 @@ test('Rule 5: honours a custom search idle time', () => {
   const settings = { ...SETTINGS, searchIdleMinutes: 5 };
   const tabs = [tab(1, { url: 'https://www.google.com/search?q=x' })];
   assert.deepEqual(decide(tabs, { 1: visitedAgo(5 * MINUTE) }, ctx({ settings })).map((c) => c.reason), ['search']);
+});
+
+test('Rule 6: a lone Gmail or Calendar tab is never closed, however old', () => {
+  const tabs = [tab(1, { url: 'https://mail.google.com/mail/u/0/#inbox' }), tab(2, { url: 'https://calendar.google.com/calendar/r' })];
+  const old = visitedAgo(72 * HOUR);
+  assert.deepEqual(decide(tabs, { 1: old, 2: old }, ctx()), []);
+  assert.equal(nextDeadline(tabs, { 1: old, 2: old }, ctx()), null);
+});
+
+test('Rule 6: only the most recently visited tab of the site is kept; extras follow the rules', () => {
+  const tabs = [
+    tab(1, { url: 'https://mail.google.com/mail/u/0/#inbox' }),
+    tab(2, { url: 'https://mail.google.com/mail/u/1/#inbox' }),
+    tab(3, { url: 'https://mail.google.com/mail/u/0/#inbox/abc' }),
+  ];
+  const entries = { 1: visitedAgo(2 * HOUR), 2: visitedAgo(25 * HOUR), 3: visitedAgo(HOUR) };
+  assert.deepEqual([...keptTabIds(tabs, entries, ctx())], [3]);
+  assert.deepEqual(decide(tabs, entries, ctx()).map((c) => [c.tab.id, c.reason]), [[2, 'stale'], [1, 'duplicate']]);
+});
+
+test('Rule 6: an empty list keeps nothing; patterns cover subdomains', () => {
+  const tabs = [tab(1, { url: 'https://mail.google.com/mail/u/0/' })];
+  const settings = { ...SETTINGS, keepOneHosts: [] };
+  assert.deepEqual(decide(tabs, { 1: visitedAgo(48 * HOUR) }, ctx({ settings })).map((c) => c.reason), ['stale']);
+  const covered = { ...SETTINGS, keepOneHosts: ['google.com'] };
+  assert.deepEqual(decide(tabs, { 1: visitedAgo(48 * HOUR) }, ctx({ settings: covered })), []);
 });
 
 test('Rule 4: honours a custom landing list and idle time', () => {

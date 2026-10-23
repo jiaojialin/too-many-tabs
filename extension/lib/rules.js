@@ -6,7 +6,7 @@
 
 import { isGoogleSearchResults, isLandingPage } from './landing.js';
 import { isSignInPage, isSignedOutPage } from './logout.js';
-import { isWebUrl, normalizeUrl } from './url.js';
+import { hostMatches, hostOf, isWebUrl, normalizeUrl } from './url.js';
 
 export const MINUTE = 60 * 1000;
 export const HOUR = 60 * MINUTE;
@@ -21,8 +21,31 @@ export function isExempt(tab, entry, ctx) {
     tab.incognito ||
       tab.pinned ||
       (tab.audible && !entry?.mutedByUs) ||
-      tab.id === ctx.visitedTabId,
+      tab.id === ctx.visitedTabId ||
+      ctx.keptTabIds?.has(tab.id),
   );
+}
+
+// "Keep one tab open" sites (e.g. Gmail, Google Calendar): for each listed
+// host pattern, the most recently visited matching tab is never auto-closed.
+// Extra tabs of the site follow the normal rules.
+export function keptTabIds(tabs, entries, ctx) {
+  const kept = new Set();
+  for (const pattern of ctx.settings.keepOneHosts ?? []) {
+    let best = null;
+    for (const tab of tabs) {
+      const host = hostOf(tab.url ?? '');
+      if (tab.incognito || !host || !hostMatches(host, pattern)) continue;
+      const visited = lastVisitedAt(tab, entries[tab.id], ctx);
+      if (!best || visited > best.visited || (visited === best.visited && tab.id > best.tab.id)) best = { tab, visited };
+    }
+    if (best) kept.add(best.tab.id);
+  }
+  return kept;
+}
+
+function withKeptTabs(tabs, entries, ctx) {
+  return ctx.keptTabIds ? ctx : { ...ctx, keptTabIds: keptTabIds(tabs, entries, ctx) };
 }
 
 // Rule 4 applies to a non-exempt tab that is still on a landing page or a
@@ -106,7 +129,8 @@ export function groupDuplicates(tabs) {
 // Time-based rules run first; duplicates are then resolved among the tabs
 // that remain, so a copy is never closed as a duplicate of a tab that is
 // itself being closed.
-export function decide(tabs, entries, ctx) {
+export function decide(tabs, entries, baseCtx) {
+  const ctx = withKeptTabs(tabs, entries, baseCtx);
   const closures = [];
   const closing = new Set();
   const landingLimit = thresholds(ctx.settings).landing;
@@ -139,7 +163,8 @@ export function decide(tabs, entries, ctx) {
 }
 
 // Earliest time any non-exempt tab reaches a closing threshold, or null.
-export function nextDeadline(tabs, entries, ctx) {
+export function nextDeadline(tabs, entries, baseCtx) {
+  const ctx = withKeptTabs(tabs, entries, baseCtx);
   const limit = thresholds(ctx.settings);
   let next = null;
   const consider = (due) => {

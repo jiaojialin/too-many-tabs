@@ -50,3 +50,9 @@ test('mergeSettings: search results idle time defaults to 60 minutes', () => {
   assert.equal(mergeSettings({ searchIdleMinutes: 15 }).searchIdleMinutes, 15);
   assert.equal(mergeSettings({ searchIdleMinutes: 0 }).searchIdleMinutes, 60);
 });
+
+test('mergeSettings: keep-one list defaults to Gmail and Google Calendar', () => {
+  assert.deepEqual(mergeSettings({}).keepOneHosts, ['mail.google.com', 'calendar.google.com']);
+  assert.deepEqual(mergeSettings({ keepOneHosts: [] }).keepOneHosts, []);
+  assert.deepEqual(mergeSettings({ keepOneHosts: ['outlook.office.com', 3] }).keepOneHosts, ['outlook.office.com']);
+});

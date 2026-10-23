@@ -16,6 +16,7 @@ function fill(settings) {
   for (const id of NUMBER_FIELDS) $(id).value = settings[id];
   $('audioPauseEnabled').checked = settings.audioPauseEnabled;
   $('keepPlayingHosts').value = settings.keepPlayingHosts.join('\n');
+  $('keepOneHosts').value = settings.keepOneHosts.join('\n');
   $('siteRules').value = formatSiteRules(settings.siteRules);
   $('landingPages').value = settings.landingPages.join('\n');
 }
@@ -41,6 +42,7 @@ $('form').addEventListener('submit', async (event) => {
     ...Object.fromEntries(NUMBER_FIELDS.map((id) => [id, Number($(id).value)])),
     audioPauseEnabled: $('audioPauseEnabled').checked,
     keepPlayingHosts: parseHostList($('keepPlayingHosts').value),
+    keepOneHosts: parseHostList($('keepOneHosts').value),
     siteRules: rules,
     landingPages: parsePatternList($('landingPages').value),
   });

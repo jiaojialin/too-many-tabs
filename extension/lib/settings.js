@@ -23,6 +23,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   audioPauseEnabled: true,
   audioPauseDelaySeconds: 2,
   keepPlayingHosts: [],
+  // One tab of each of these sites is always kept open (README Rule 6).
+  keepOneHosts: ['mail.google.com', 'calendar.google.com'],
   siteRules: DEFAULT_SITE_RULES,
 });
 
@@ -50,6 +52,9 @@ export function mergeSettings(stored = {}) {
     keepPlayingHosts: Array.isArray(s.keepPlayingHosts)
       ? s.keepPlayingHosts.filter((h) => typeof h === 'string' && h)
       : [],
+    keepOneHosts: Array.isArray(s.keepOneHosts)
+      ? s.keepOneHosts.filter((h) => typeof h === 'string' && h)
+      : DEFAULT_SETTINGS.keepOneHosts,
     siteRules: Array.isArray(s.siteRules)
       ? s.siteRules.filter((r) => r && typeof r.host === 'string' && isValidPattern(r.pattern))
       : DEFAULT_SITE_RULES,
